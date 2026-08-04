@@ -126,6 +126,49 @@ curl -4 https://api.ipify.org
 ./scripts/check.sh
 ```
 
+## Kill-switch
+
+Platformlara özel kill-switch scriptleri `scripts/` klasorunde bulunur:
+
+| Platform | Script | Mekanizma |
+|---|---|---|
+| Linux | `scripts/killswitch-linux.sh` | nftables (forward/output chain) |
+| macOS | `scripts/killswitch-macos.sh` | ApplicationFirewall (socketfilterfw) |
+| Windows | `scripts/killswitch-windows.ps1` | WFP (New-NetFirewallRule) |
+
+Kullanim:
+
+```bash
+# Linux
+sudo bash scripts/killswitch-linux.sh ac
+sudo bash scripts/killswitch-linux.sh kapat
+sudo bash scripts/killswitch-linux.sh durum
+
+# macOS
+sudo bash scripts/killswitch-macos.sh ac
+sudo bash scripts/killswitch-macos.sh kapat
+sudo bash scripts/killswitch-macos.sh durum
+
+# Windows (PowerShell, yonetici)
+.\scripts\killswitch-windows.ps1 ac
+.\scripts\killswitch-windows.ps1 kapat
+.\scripts\killswitch-windows.ps1 durum
+```
+
+### DNS leak testi
+
+Kill-switch aktifken DNS sorgularinin tumune gidebildigini test edin:
+
+```bash
+# Linux/macOS
+dig +short myip.opendns.com @resolver1.opendns.com
+
+# Windows
+Resolve-DnsName myip.opendns.com -Server 208.67.222.222
+```
+
+Sonuc VPN sunucunun IP'sini gostermeli, ISP DNS sunucusunu gostermemelidir.
+
 ## Yol haritası
 
 - [x] Private repo ve ilk Rust CLI iskeleti
@@ -133,8 +176,11 @@ curl -4 https://api.ipify.org
 - [x] Peer ekleme ve iptal etme
 - [x] Rust CLI güvenlik sertleştirmesi (stdin private key, path traversal, libc FFI, secret zeroing)
 - [x] Ayrıcalıklı helper protokolü (Unix socket + systemd service)
+- [x] Linux kill-switch (nftables)
+- [x] Windows kill-switch (WFP)
+- [x] macOS kill-switch (ApplicationFirewall)
+- [x] DNS leak test dokümantasyonu
 - [ ] Gerçek cihazla WireGuard handshake ve IPv4/DNS egress testi
-- [ ] Linux/macOS/Windows için ayrı ayrı kill-switch ve DNS leak testleri
 - [ ] Tauri 2 + React GUI
 - [ ] İmzasız kişisel paketler; dağıtım yapılırsa kod imzalama
 
