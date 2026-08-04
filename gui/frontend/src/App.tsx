@@ -9,6 +9,7 @@ import {
 } from './lib/helper';
 import ConnectionPanel from './components/ConnectionPanel';
 import StatusPanel from './components/StatusPanel';
+import PeerManager from './components/PeerManager';
 
 function App() {
   const [helperRunning, setHelperRunning] = useState<boolean | null>(null);
@@ -145,6 +146,7 @@ function App() {
 
       <StatusPanel onRefresh={refreshVpnStatus} />
       <ConnectionPanel onConnect={handleConnect} onDisconnect={handleDisconnect} loading={loading} />
+      <PeerManager />
     </div>
   );
 }

@@ -23,3 +23,15 @@ export async function vpnDisconnect(iface: string): Promise<any> {
 export async function vpnStatus(): Promise<any> {
   return invoke('vpn_status');
 }
+
+export async function peerList(): Promise<any> {
+  return invoke('peer_list');
+}
+
+export async function peerAdd(name: string): Promise<any> {
+  return invoke('peer_add', { name });
+}
+
+export async function peerRemove(name: string): Promise<any> {
+  return invoke('peer_remove', { name });
+}

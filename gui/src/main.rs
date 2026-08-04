@@ -54,10 +54,54 @@ fn vpn_status() -> Result<serde_json::Value, String> {
     helper::cmd_status()
 }
 
+#[tauri::command]
+fn peer_list() -> Result<serde_json::Value, String> {
+    let output = std::process::Command::new("sudo")
+        .args(["wg", "show", "wg0", "peers"])
+        .output()
+        .map_err(|e| e.to_string())?;
+    if output.status.success() {
+        let text = String::from_utf8_lossy(&output.stdout).to_string();
+        let peers: Vec<serde_json::Value> = text
+            .lines()
+            .filter(|l| !l.trim().is_empty())
+            .map(|l| serde_json::json!({"publicKey": l.trim()}))
+            .collect();
+        Ok(serde_json::json!({"ok": true, "peers": peers}))
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).to_string())
+    }
+}
+
+#[tauri::command]
+fn peer_add(name: String) -> Result<serde_json::Value, String> {
+    let output = std::process::Command::new("sudo")
+        .args(["untracx-add-peer", &name])
+        .output()
+        .map_err(|e| e.to_string())?;
+    if output.status.success() {
+        Ok(serde_json::json!({"ok": true, "output": String::from_utf8_lossy(&output.stdout).to_string()}))
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).to_string())
+    }
+}
+
+#[tauri::command]
+fn peer_remove(name: String) -> Result<serde_json::Value, String> {
+    let output = std::process::Command::new("sudo")
+        .args(["untracx-remove-peer", &name])
+        .output()
+        .map_err(|e| e.to_string())?;
+    if output.status.success() {
+        Ok(serde_json::json!({"ok": true, "output": String::from_utf8_lossy(&output.stdout).to_string()}))
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).to_string())
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
             helper_start,
             helper_stop,
@@ -65,6 +109,9 @@ pub fn run() {
             vpn_connect,
             vpn_down,
             vpn_status,
+            peer_list,
+            peer_add,
+            peer_remove,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri app");
