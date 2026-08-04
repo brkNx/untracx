@@ -5,7 +5,7 @@
   "identifier": "com.untracx.app",
   "build": {
     "frontendDist": "../frontend/dist",
-    "devPath": "http://localhost:5173",
+    "devUrl": "http://localhost:5173",
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build"
   },
@@ -21,20 +21,11 @@
       }
     ],
     "security": {
-      "devCsp": false,
-      "capabilities": ["main"]
+      "csp": null
     }
   },
   "bundle": {
     "active": true,
-    "targets": "all",
-    "identifier": "com.untracx.app",
-    "icon": [
-      "icons/32x32.png",
-      "icons/128x128.png",
-      "icons/128x128@2x.png",
-      "icons/icon.icns",
-      "icons/icon.ico"
-    ]
+    "targets": "all"
   }
 }
