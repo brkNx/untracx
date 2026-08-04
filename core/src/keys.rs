@@ -27,9 +27,10 @@ pub fn validate_private(private_b64: &str) -> Result<[u8; 32], String> {
 
 pub fn public_from_private(private_b64: &str) -> Result<String, String> {
     let raw = validate_private(private_b64)?;
+    let mut raw = validate_private(private_b64)?;
     let secret = StaticSecret::from(raw);
     let public = PublicKey::from(&secret);
-    raw_array.zeroize();
+    raw.zeroize();
     Ok(B64.encode(public.as_bytes()))
 }
 
