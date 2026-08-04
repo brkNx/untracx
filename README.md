@@ -144,9 +144,10 @@ curl -4 https://api.ipify.org
 - [x] Güvenli/idempotent Ubuntu sunucu bootstrap
 - [x] Oracle Cloud Always Free sunucu kurulumu (`158.180.50.114`, Ubuntu 24.04 x86_64)
 - [x] Peer ekleme ve iptal etme
+- [x] Rust CLI güvenlik sertleştirmesi (stdin okuma, private key gizleme, path traversal koruması, libc FFI)
+- [x] Ayrıcalıklı helper protokolü (Unix socket + systemd servisi)
 - [ ] Gerçek cihazla WireGuard handshake ve IPv4/DNS egress testi
 - [ ] Linux/macOS/Windows için ayrı ayrı kill-switch ve DNS leak testleri
-- [ ] Rust CLI güvenlik sertleştirmesi ve ayrıcalıklı helper protokolü
 - [ ] Tauri 2 + React GUI
 - [ ] İmzasız kişisel paketler; dağıtım yapılırsa kod imzalama
 

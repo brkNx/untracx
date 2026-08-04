@@ -1,0 +1,13 @@
+[Unit]
+Description=untracx privileged helper (WireGuard control)
+After=network.target wg-quick@wg0.service
+Wants=wg-quick@wg0.service
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/untracx-helper
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target
