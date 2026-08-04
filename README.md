@@ -180,9 +180,9 @@ Sonuc VPN sunucunun IP'sini gostermeli, ISP DNS sunucusunu gostermemelidir.
 - [x] Windows kill-switch (WFP)
 - [x] macOS kill-switch (ApplicationFirewall)
 - [x] DNS leak test dokümantasyonu
+- [x] Tauri 2 + React GUI scaffold
 - [ ] Gerçek cihazla WireGuard handshake ve IPv4/DNS egress testi
-- [ ] Tauri 2 + React GUI
-- [ ] İmzasız kişisel paketler; dağıtım yapılırsa kod imzalama
+- [ ] İmzalı paket dağıtımı (signing + release workflow)
 
 ## Lisans
 

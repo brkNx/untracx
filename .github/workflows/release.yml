@@ -1,0 +1,99 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-sign:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact: untracx-linux-x86_64
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            artifact: untracx-linux-arm64
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact: untracx-macos-x86_64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact: untracx-macos-arm64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: untracx-windows-x86_64.exe
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build release binary
+        run: cargo build --manifest-path core/Cargo.toml --target ${{ matrix.target }} --release
+
+      - name: Sign binary (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          codesign --sign "${{ secrets.CODESIGN_IDENTITY }}" --force \
+            core/target/${{ matrix.target }}/release/untracx || true
+
+      - name: Sign binary (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          osslsigncode sign \
+            -pkcs12 "${{ secrets.WINDOWS_SIGNING_CERT }}" \
+            -pass "${{ secrets.WINDOWS_SIGNING_PASS }}" \
+            -in core/target/${{ matrix.target }}/release/untracx.exe \
+            -out core/target/${{ matrix.target }}/release/untracx-signed.exe \
+            -t http://timestamp.digicert.com || true
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            core/target/${{ matrix.target }}/release/untracx
+            core/target/${{ matrix.target }}/release/untracx.exe
+          if-no-files-found: error
+
+  release:
+    needs: build-and-sign
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Generate checksums
+        run: |
+          cd dist
+          find . -type f -exec sha256sum {} \; > checksums.txt
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*
+            dist/checksums.txt
+          draft: false
+          prerelease: false
+
+      - name: Upload to package registry
+        run: |
+          echo "Package publishing would go here"
+          echo "See SECURITY.md for publishing checklist"
