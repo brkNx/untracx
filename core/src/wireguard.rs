@@ -7,7 +7,7 @@ pub struct ConnInfo {
 }
 
 pub fn connect(config_path: &str) -> Result<(), String> {
-    if unsafe { libc_geteuid() } != 0 {
+    if unsafe { libc::geteuid() } != 0 {
         return Err("root/yönetici hakları gerekli: sudo untracx connect <conf>".into());
     }
     let conn = resolve_interface(config_path)?;
@@ -44,7 +44,7 @@ pub fn connect(config_path: &str) -> Result<(), String> {
 }
 
 pub fn down(config_path: &str) -> Result<(), String> {
-    if unsafe { libc_geteuid() } != 0 {
+    if unsafe { libc::geteuid() } != 0 {
         return Err("root/yönetici hakları gerekli: sudo untracx down".into());
     }
     let conn = resolve_interface(config_path)?;
@@ -100,34 +100,4 @@ fn command_exists(cmd: &str) -> bool {
         .output()
         .map(|o| o.status.success())
         .unwrap_or(false)
-}
-
-#[cfg(unix)]
-unsafe fn libc_geteuid() -> u32 {
-    let uid = std::process::Command::new("id")
-        .arg("-u")
-        .output()
-        .map(|o| {
-            String::from_utf8_lossy(&o.stdout)
-                .trim()
-                .parse()
-                .unwrap_or(0)
-        })
-        .unwrap_or(0);
-    uid
-}
-
-#[cfg(windows)]
-unsafe fn libc_geteuid() -> u32 {
-    use std::process::Command;
-    let out = Command::new("net")
-        .args(["session"])
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false);
-    if out {
-        0
-    } else {
-        1
-    }
 }

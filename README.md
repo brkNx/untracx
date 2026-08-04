@@ -131,9 +131,10 @@ curl -4 https://api.ipify.org
 - [x] Private repo ve ilk Rust CLI iskeleti
 - [x] Güvenli/idempotent Ubuntu sunucu bootstrap
 - [x] Peer ekleme ve iptal etme
+- [x] Rust CLI güvenlik sertleştirmesi (stdin private key, path traversal, libc FFI, secret zeroing)
+- [x] Ayrıcalıklı helper protokolü (Unix socket + systemd service)
 - [ ] Gerçek cihazla WireGuard handshake ve IPv4/DNS egress testi
 - [ ] Linux/macOS/Windows için ayrı ayrı kill-switch ve DNS leak testleri
-- [ ] Rust CLI güvenlik sertleştirmesi ve ayrıcalıklı helper protokolü
 - [ ] Tauri 2 + React GUI
 - [ ] İmzasız kişisel paketler; dağıtım yapılırsa kod imzalama
 
