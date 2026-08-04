@@ -1,65 +1,141 @@
 # untracx
 
-Ücretsiz kişisel VPN — **WireGuard** + **Rust** çekirdek + **Tauri/React** GUI.
-Türkiye & Azerbaycan odaklı kullanım; maliyet: **0 ₺** (Oracle Cloud Always Free).
+Kişisel kullanım için WireGuard tabanlı VPN projesi. Hedef; önce güvenli ve tekrar üretilebilir bir sunucu kurulumu, ardından Rust/Tauri tabanlı masaüstü istemcisidir.
 
-## Mimari
+> Durum: Aşama 1 sürüyor. Sunucu bootstrap ve peer yönetimi hazır; platformlara özel gerçek kill-switch ve GUI henüz tamamlanmadı.
 
+## Ne sağlar, ne sağlamaz?
+
+- Cihaz ile Oracle VM arasındaki trafiği WireGuard ile şifreler.
+- Ortak Wi-Fi veya yerel ISP'nin bu tünelin içeriğini görmesini engeller.
+- İnternet trafiği Oracle VM'nin bulunduğu bölgeden çıkar.
+- Anonimlik sağlamaz: Oracle, hedef servisler ve oturum açtığınız hesaplar sizi farklı yollarla ilişkilendirebilir.
+- Türkiye veya Azerbaycan çıkış IP'si sağlamaz; bunun için o ülkelerde bir sunucu gerekir.
+- `AllowedIPs` tek başına kill-switch değildir. Platforma özel sızıntı engelleme Aşama 2 kapsamındadır.
+
+Detaylı sınırlar için [docs/SECURITY.md](docs/SECURITY.md) belgesine bakın.
+
+## Mevcut mimari
+
+```text
+Resmi WireGuard istemcisi / wg-quick
+              |
+        WireGuard tüneli
+              |
+Ubuntu 24.04 VM -> kernel WireGuard -> UFW/NAT -> Internet
+              |
+      Unbound recursive DNS
 ```
-React GUI → Tauri (Rust) → core CLI → root helper → wireguard-go → VPS (Frankfurt)
+
+Planlanan masaüstü katmanı:
+
+```text
+React GUI -> Tauri/Rust -> ayrıcalıklı, dar kapsamlı helper -> işletim sistemi WireGuard backend'i
 ```
 
-## Sunucu (bir kez, Oracle Cloud Always Free ARM)
+## Ücretsiz kullanım notu
 
-1. Oracle Cloud'ta Always Free ARM VM açın (Ubuntu 22.04/24.04, AMD64 değil ARM!)
-2. Frankfurt bölgesi seçin (TR ~35ms, AZ ~55ms)
-3. VM'e SSH olun ve çalıştırın:
+Oracle'ın güncel Always Free sınırları seçilen shape ve home region'a bağlıdır. x86_64 `VM.Standard.E2.1.Micro` ve Arm `VM.Standard.A1.Flex` seçenekleri farklı kapasitelere sahiptir. VM, boot volume ve ağ kaynaklarında **Always Free-eligible** etiketini Oracle Console'da doğrulamadan “0 maliyet” varsaymayın. Bütçe alarmı açmanız önerilir.
+
+Bu repo hem Ubuntu 24.04 x86_64 hem arm64 sunucuyu destekler.
+
+## 1. Oracle ağ kuralları
+
+Kurulumdan önce OCI Network Security Group veya Security List üzerinde:
+
+| Yön | Protokol/port | Kaynak | Amaç |
+|---|---|---|---|
+| Ingress | TCP 22 | Mümkünse kendi public IP'niz `/32` | SSH yönetimi |
+| Ingress | UDP 51820 | Seyahatte kullanacaksanız `0.0.0.0/0` | WireGuard |
+
+TCP 53 veya UDP 53'ü internete açmayın; DNS yalnız VPN alt ağından kabul edilir. Ayrıntılı adımlar: [docs/ORACLE.md](docs/ORACLE.md).
+
+## 2. Sunucu dosyalarını yükleme
+
+Repo private olduğu için `raw.githubusercontent.com/.../setup.sh` komutu kimlik doğrulamasız çalışmaz. Yerel checkout'tan bütün `server/` klasörünü yükleyin:
 
 ```bash
-sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/brkNx/untracx/main/server/setup.sh)"
+scp -r server ubuntu@158.180.50.114:/tmp/untracx-server
+ssh ubuntu@158.180.50.114
 ```
 
-4. Sunucu `PublicKey` ve genel IP'yi not edin.
-5. Her cihaz için: `sudo bash add-peer.sh macbook` → `/root/untracx-macbook.conf` çıkar, `scp` ile cihaza kopyalayın, **sonra sunucudan silin**.
-
-## İstemci (macOS / Linux / Windows)
+Sunucuda:
 
 ```bash
-cd core
-cargo build --release
-
-# 1. Anahtar üret
-./target/release/untracx keygen
-
-# 2. Config üret (sunucu çıktısındaki bilgilerle)
-./target/release/untracx genconfig \
-  --client-private <yukarıdaki PrivateKey> \
-  --server-public  <sunucu PublicKey> \
-  --server-ip      <sunucu genel IP> \
-  -o client.conf
-
-# 3. Bağlan (Linux/macOS: wg-quick gerekir; yoksa: bash scripts/fetch-wireguard-go.sh)
-sudo ./target/release/untracx connect client.conf
-
-# 4. Durum / kapat
-untracx status
-sudo untracx down client.conf
+cd /tmp/untracx-server
+sudo PUBLIC_ENDPOINT=158.180.50.114 bash setup.sh
 ```
 
-## Güvenlik
+Script şunları yapar:
 
-- Kill-switch: `AllowedIPs = 0.0.0.0/0, ::/0` — bağlantı koparsa trafik durur
-- DNS tünel içinden (10.66.66.1), sızıntı olmaz
-- Sunucu özel anahtarı yalnızca sunucuda; istemci anahtarları repo'ya asla (`*.conf` gitignore)
-- ufw: yalnızca SSH + UDP 51820; fail2ban + otomatik güvenlik yamaları
+- WireGuard, UFW, fail2ban ve unattended-upgrades kurar.
+- OCI dış ağ arayüzünü otomatik bulur; `eth0` varsaymaz.
+- Sunucu anahtarını ilk çalıştırmada üretir, sonraki çalıştırmalarda korur.
+- Peer kayıtlarını yeniden çalıştırmada silmez.
+- `10.66.66.1` üzerinde yalnız VPN alt ağına açık Unbound DNS kurar.
+- `untracx-add-peer` ve `untracx-remove-peer` komutlarını yükler.
 
-## Yol Haritası
+## 3. İlk cihazı ekleme
 
-- [x] Aşama 1: Repo + sunucu scriptleri + core CLI (keygen/genconfig)
-- [ ] Aşama 2: kill-switch doğrulaması, IPv6, bağlantı testleri
-- [ ] Aşama 3: Tauri + React GUI (bağlan/kop, durum, profiller, tepsi)
-- [ ] Aşama 4: root helper (Windows admin/service, macOS launchd, Linux pkexec)
-- [ ] Aşama 5: Paketleme (MSI/AppImage/DMG, imzasız kişisel)
+Sunucuda:
+
+```bash
+sudo untracx-add-peer macbook
+```
+
+Komut config dosyasını `sudo` çağrısını yapan kullanıcının home dizinine 0600 izinle yazar. Yerel bilgisayarda:
+
+```bash
+scp ubuntu@158.180.50.114:~/untracx-macbook.conf .
+```
+
+Dosyayı resmi WireGuard uygulamasına aktarın. Aktardıktan sonra sunucudaki geçici kopyayı silin:
+
+```bash
+ssh ubuntu@158.180.50.114 'rm -f ~/untracx-macbook.conf'
+```
+
+Kaybolan veya artık kullanılmayan cihazı iptal etmek için:
+
+```bash
+sudo untracx-remove-peer macbook
+```
+
+## 4. Doğrulama
+
+Sunucuda:
+
+```bash
+sudo systemctl status wg-quick@wg0 --no-pager
+sudo wg show wg0
+sudo systemctl status unbound --no-pager
+sudo ufw status verbose
+```
+
+İstemci bağlandıktan sonra:
+
+```bash
+curl -4 https://api.ipify.org
+```
+
+Çıktı sunucu endpoint'i olmalıdır. DNS ve kill-switch testleri tamamlanmadan istemciyi “sızıntısız” kabul etmeyin.
+
+## Geliştirici kontrolleri
+
+```bash
+./scripts/check.sh
+```
+
+## Yol haritası
+
+- [x] Private repo ve ilk Rust CLI iskeleti
+- [x] Güvenli/idempotent Ubuntu sunucu bootstrap
+- [x] Peer ekleme ve iptal etme
+- [ ] Gerçek cihazla WireGuard handshake ve IPv4/DNS egress testi
+- [ ] Linux/macOS/Windows için ayrı ayrı kill-switch ve DNS leak testleri
+- [ ] Rust CLI güvenlik sertleştirmesi ve ayrıcalıklı helper protokolü
+- [ ] Tauri 2 + React GUI
+- [ ] İmzasız kişisel paketler; dağıtım yapılırsa kod imzalama
 
 ## Lisans
 

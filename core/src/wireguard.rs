@@ -37,7 +37,10 @@ pub fn connect(config_path: &str) -> Result<(), String> {
         return Err(String::from_utf8_lossy(&out.stderr).into());
     }
 
-    Err("Ne wg-quick ne wireguard-go bulunamadı. Kurulum: bash scripts/fetch-wireguard-go.sh".into())
+    Err(
+        "Ne wg-quick ne wireguard-go bulunamadı. Kurulum: bash scripts/fetch-wireguard-go.sh"
+            .into(),
+    )
 }
 
 pub fn down(config_path: &str) -> Result<(), String> {
@@ -104,7 +107,12 @@ unsafe fn libc_geteuid() -> u32 {
     let uid = std::process::Command::new("id")
         .arg("-u")
         .output()
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().parse().unwrap_or(0))
+        .map(|o| {
+            String::from_utf8_lossy(&o.stdout)
+                .trim()
+                .parse()
+                .unwrap_or(0)
+        })
         .unwrap_or(0);
     uid
 }
@@ -117,5 +125,9 @@ unsafe fn libc_geteuid() -> u32 {
         .output()
         .map(|o| o.status.success())
         .unwrap_or(false);
-    if out { 0 } else { 1 }
+    if out {
+        0
+    } else {
+        1
+    }
 }
