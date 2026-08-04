@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::io::{Read as _, Write as _};
+use std::io::{BufRead as _, BufReader, Write as _};
 use std::os::unix::net::UnixListener;
 use std::path::PathBuf;
 use std::process::Command;
@@ -107,15 +107,12 @@ pub fn start_socket_listener() -> Result<(), String> {
 
     for stream in listener.incoming() {
         match stream {
-            Ok(stream) => {
-                let mut buf = String::new();
-                let mut reader = std::io::BufReader::new(&stream);
-                if reader.read_to_string(&mut buf).is_ok() && !buf.trim().is_empty() {
-                    let response = handle_request(buf.trim());
-                    let _ = stream
-                        .peer_addr()
-                        .and_then(|_| stream.try_clone())
-                        .and_then(|mut s| s.write_all(response.as_bytes()));
+            Ok(mut stream) => {
+                let mut reader = BufReader::new(&mut stream);
+                let mut line = String::new();
+                if reader.read_line(&mut line).is_ok() && !line.trim().is_empty() {
+                    let response = handle_request(line.trim());
+                    let _ = writeln!(stream, "{}", response);
                 }
             }
             Err(_) => continue,
