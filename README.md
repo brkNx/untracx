@@ -190,6 +190,49 @@ dig @10.66.66.1 google.com
 ./scripts/check.sh
 ```
 
+## Kill-switch
+
+Platformlara özel kill-switch scriptleri `scripts/` klasorunde bulunur:
+
+| Platform | Script | Mekanizma |
+|---|---|---|
+| Linux | `scripts/killswitch-linux.sh` | nftables (forward/output chain) |
+| macOS | `scripts/killswitch-macos.sh` | ApplicationFirewall (socketfilterfw) |
+| Windows | `scripts/killswitch-windows.ps1` | WFP (New-NetFirewallRule) |
+
+Kullanim:
+
+```bash
+# Linux
+sudo bash scripts/killswitch-linux.sh ac
+sudo bash scripts/killswitch-linux.sh kapat
+sudo bash scripts/killswitch-linux.sh durum
+
+# macOS
+sudo bash scripts/killswitch-macos.sh ac
+sudo bash scripts/killswitch-macos.sh kapat
+sudo bash scripts/killswitch-macos.sh durum
+
+# Windows (PowerShell, yonetici)
+.\scripts\killswitch-windows.ps1 ac
+.\scripts\killswitch-windows.ps1 kapat
+.\scripts\killswitch-windows.ps1 durum
+```
+
+### DNS leak testi
+
+Kill-switch aktifken DNS sorgularinin tumune gidebildigini test edin:
+
+```bash
+# Linux/macOS
+dig +short myip.opendns.com @resolver1.opendns.com
+
+# Windows
+Resolve-DnsName myip.opendns.com -Server 208.67.222.222
+```
+
+Sonuc VPN sunucunun IP'sini gostermeli, ISP DNS sunucusunu gostermemelidir.
+
 ## Yol haritası
 
 - [x] Private repo ve ilk Rust CLI iskeleti

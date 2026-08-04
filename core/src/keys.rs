@@ -1,6 +1,7 @@
 use base64::engine::general_purpose::STANDARD as B64;
 use base64::Engine;
 use x25519_dalek::{PublicKey, StaticSecret};
+use zeroize::Zeroize;
 
 pub struct KeyPair {
     pub private: String,
@@ -26,14 +27,16 @@ pub fn validate_private(private_b64: &str) -> Result<[u8; 32], String> {
 
 pub fn public_from_private(private_b64: &str) -> Result<String, String> {
     let raw = validate_private(private_b64)?;
+    let mut raw = validate_private(private_b64)?;
     let secret = StaticSecret::from(raw);
     let public = PublicKey::from(&secret);
+    raw.zeroize();
     Ok(B64.encode(public.as_bytes()))
 }
 
 pub fn validate_public(public_b64: &str) -> Result<(), String> {
-    let raw = B64.decode(public_b64.trim()).map_err(|e| e.to_string())?;
-    if raw.len() != 32 {
+    let decoded = B64.decode(public_b64.trim()).map_err(|e| e.to_string())?;
+    if decoded.len() != 32 {
         return Err("Genel anahtar 32 bayt olmalı".to_string());
     }
     Ok(())
