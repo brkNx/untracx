@@ -68,6 +68,16 @@ enum HelperAction {
     Status,
 }
 
+impl From<HelperAction> for helper::HelperAction {
+    fn from(a: HelperAction) -> Self {
+        match a {
+            HelperAction::Start => helper::HelperAction::Start,
+            HelperAction::Stop => helper::HelperAction::Stop,
+            HelperAction::Status => helper::HelperAction::Status,
+        }
+    }
+}
+
 fn main() {
     let cli = Cli::parse();
     if let Err(e) = run(cli) {
@@ -133,7 +143,7 @@ fn run(cli: Cli) -> Result<(), String> {
         Commands::Connect { config } => wireguard::connect(&config)?,
         Commands::Down { config } => wireguard::down(&config)?,
         Commands::Status => wireguard::status()?,
-        Commands::Helper { action } => helper::run(action)?,
+        Commands::Helper { action } => helper::run(helper::HelperAction::from(action))?,
     }
     Ok(())
 }

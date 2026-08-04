@@ -15,3 +15,7 @@
 # Editor
 .vscode/
 .idea/
+
+# GUI
+gui/frontend/dist/
+gui/frontend/node_modules/

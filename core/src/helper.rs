@@ -5,30 +5,26 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::Path;
 use std::process::Command;
 
-const SOCK_PATH: &str = "/run/user/UNTRACX_UID/untracx.sock";
-
-fn sock_path() -> String {
-    let uid = unsafe { libc::getuid() };
-    SOCK_PATH.replace("UNTRACX_UID", &uid.to_string())
+pub enum HelperAction {
+    Start,
+    Stop,
+    Status,
 }
 
-fn allowed_config_dirs() -> Vec<String> {
-    let mut dirs = vec!["/etc/wireguard".to_string()];
-    if let Some(home) = std::env::var_os("HOME") {
-        dirs.push(format!("{}/.config/untracx", home.to_string_lossy()));
-    }
-    dirs
-}
-
-pub fn run(action: super::HelperAction) -> Result<(), String> {
+pub fn run(action: HelperAction) -> Result<(), String> {
     match action {
-        super::HelperAction::Start => start(),
-        super::HelperAction::Stop => stop(),
-        super::HelperAction::Status => status(),
+        HelperAction::Start => start(),
+        HelperAction::Stop => stop(),
+        HelperAction::Status => status(),
     }
 }
 
-fn start() -> Result<(), String> {
+pub fn sock_path() -> String {
+    let uid = unsafe { libc::getuid() };
+    format!("/run/user/{}/untracx.sock", uid)
+}
+
+pub fn start() -> Result<(), String> {
     let path = sock_path();
     if Path::new(&path).exists() {
         return Err(format!("Socket zaten mevcut: {}", path));
@@ -48,7 +44,7 @@ fn start() -> Result<(), String> {
     Ok(())
 }
 
-fn stop() -> Result<(), String> {
+pub fn stop() -> Result<(), String> {
     let path = sock_path();
     if Path::new(&path).exists() {
         fs::remove_file(&path).map_err(|e| e.to_string())?;
@@ -59,18 +55,37 @@ fn stop() -> Result<(), String> {
     Ok(())
 }
 
-fn status() -> Result<(), String> {
+pub fn status() -> Result<Value, String> {
     let path = sock_path();
-    if Path::new(&path).exists() {
-        let stream = UnixStream::connect(&path).map_err(|e| e.to_string())?;
-        let req = json!({"cmd": "status"});
-        send_json(&stream, &req)?;
-        let resp = recv_json(&stream)?;
-        println!("{}", serde_json::to_string_pretty(&resp).unwrap_or_default());
-    } else {
-        println!("Helper calismiyor (socket yok): {}", path);
+    if !Path::new(&path).exists() {
+        return Ok(json!({"running": false, "socket": path}));
     }
-    Ok(())
+    let stream = UnixStream::connect(&path).map_err(|e| e.to_string())?;
+    let req = json!({"cmd": "status"});
+    send_json(&stream, &req)?;
+    let resp = recv_json(&stream)?;
+    Ok(resp)
+}
+
+pub fn cmd_connect(path: &str) -> Result<Value, String> {
+    let sock = UnixStream::connect(sock_path()).map_err(|e| e.to_string())?;
+    let req = json!({"cmd": "connect", "path": path});
+    send_json(&sock, &req)?;
+    recv_json(&sock)
+}
+
+pub fn cmd_down(iface: &str) -> Result<Value, String> {
+    let sock = UnixStream::connect(sock_path()).map_err(|e| e.to_string())?;
+    let req = json!({"cmd": "down", "iface": iface});
+    send_json(&sock, &req)?;
+    recv_json(&sock)
+}
+
+pub fn cmd_status() -> Result<Value, String> {
+    let sock = UnixStream::connect(sock_path()).map_err(|e| e.to_string())?;
+    let req = json!({"cmd": "status"});
+    send_json(&sock, &req)?;
+    recv_json(&sock)
 }
 
 fn handle_client(stream: UnixStream) {
@@ -89,14 +104,14 @@ fn handle_client(stream: UnixStream) {
 fn process_request(req: &Value) -> Value {
     let cmd = req.get("cmd").and_then(|v| v.as_str()).unwrap_or("");
     match cmd {
-        "connect" => cmd_connect(req),
-        "down" => cmd_down(req),
-        "status" => cmd_status(),
+        "connect" => cmd_connect_req(req),
+        "down" => cmd_down_req(req),
+        "status" => cmd_status_req(),
         _ => json!({"ok": false, "error": format!("Bilinmeyen komut: {}", cmd)}),
     }
 }
 
-fn cmd_connect(req: &Value) -> Value {
+fn cmd_connect_req(req: &Value) -> Value {
     let path = match req.get("path").and_then(|v| v.as_str()) {
         Some(p) => p,
         None => return json!({"ok": false, "error": "path zorunlu"}),
@@ -124,7 +139,7 @@ fn cmd_connect(req: &Value) -> Value {
     }
 }
 
-fn cmd_down(req: &Value) -> Value {
+fn cmd_down_req(req: &Value) -> Value {
     let iface = match req.get("iface").and_then(|v| v.as_str()) {
         Some(i) => i,
         None => return json!({"ok": false, "error": "iface zorunlu"}),
@@ -142,7 +157,7 @@ fn cmd_down(req: &Value) -> Value {
     }
 }
 
-fn cmd_status() -> Value {
+fn cmd_status_req() -> Value {
     let out = Command::new("wg").output();
     match out {
         Ok(o) => {
@@ -169,6 +184,14 @@ fn is_allowed_config_path(path: &str) -> bool {
         }
     }
     false
+}
+
+fn allowed_config_dirs() -> Vec<String> {
+    let mut dirs = vec!["/etc/wireguard".to_string()];
+    if let Some(home) = std::env::var_os("HOME") {
+        dirs.push(format!("{}/.config/untracx", home.to_string_lossy()));
+    }
+    dirs
 }
 
 fn is_valid_iface_name(name: &str) -> bool {
