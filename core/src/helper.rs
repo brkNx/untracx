@@ -15,7 +15,11 @@ pub fn run(action: HelperAction) -> Result<(), String> {
     match action {
         HelperAction::Start => start(),
         HelperAction::Stop => stop(),
-        HelperAction::Status => status(),
+        HelperAction::Status => {
+            let v = status()?;
+            println!("{}", serde_json::to_string_pretty(&v).unwrap_or_default());
+            Ok(())
+        }
     }
 }
 
@@ -60,43 +64,42 @@ pub fn status() -> Result<Value, String> {
     if !Path::new(&path).exists() {
         return Ok(json!({"running": false, "socket": path}));
     }
-    let stream = UnixStream::connect(&path).map_err(|e| e.to_string())?;
+    let mut stream = UnixStream::connect(&path).map_err(|e| e.to_string())?;
     let req = json!({"cmd": "status"});
-    send_json(&stream, &req)?;
-    let resp = recv_json(&stream)?;
+    send_json(&mut stream, &req)?;
+    let resp = recv_json(&mut stream)?;
     Ok(resp)
 }
 
 pub fn cmd_connect(path: &str) -> Result<Value, String> {
-    let sock = UnixStream::connect(sock_path()).map_err(|e| e.to_string())?;
+    let mut sock = UnixStream::connect(sock_path()).map_err(|e| e.to_string())?;
     let req = json!({"cmd": "connect", "path": path});
-    send_json(&sock, &req)?;
-    recv_json(&sock)
+    send_json(&mut sock, &req)?;
+    recv_json(&mut sock)
 }
 
 pub fn cmd_down(iface: &str) -> Result<Value, String> {
-    let sock = UnixStream::connect(sock_path()).map_err(|e| e.to_string())?;
+    let mut sock = UnixStream::connect(sock_path()).map_err(|e| e.to_string())?;
     let req = json!({"cmd": "down", "iface": iface});
-    send_json(&sock, &req)?;
-    recv_json(&sock)
+    send_json(&mut sock, &req)?;
+    recv_json(&mut sock)
 }
 
 pub fn cmd_status() -> Result<Value, String> {
-    let sock = UnixStream::connect(sock_path()).map_err(|e| e.to_string())?;
+    let mut sock = UnixStream::connect(sock_path()).map_err(|e| e.to_string())?;
     let req = json!({"cmd": "status"});
-    send_json(&sock, &req)?;
-    recv_json(&sock)
+    send_json(&mut sock, &req)?;
+    recv_json(&mut sock)
 }
 
-fn handle_client(stream: UnixStream) {
-    let peer = stream.peer_addr().ok().map(|a| a.to_string());
-    match recv_json(&stream) {
+fn handle_client(mut stream: UnixStream) {
+    match recv_json(&mut stream) {
         Ok(req) => {
             let resp = process_request(&req);
-            let _ = send_json(&stream, &resp);
+            let _ = send_json(&mut stream, &resp);
         }
         Err(e) => {
-            eprintln!("{} JSON okuma hatasi: {}", peer.clone().unwrap_or_default(), e);
+            eprintln!("JSON okuma hatasi: {}", e);
         }
     }
 }
@@ -200,15 +203,15 @@ fn is_valid_iface_name(name: &str) -> bool {
         && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '+' || c == '=' || c == '.' || c == '-')
 }
 
-fn send_json(stream: &UnixStream, val: &Value) -> Result<(), String> {
+fn send_json(stream: &mut UnixStream, val: &Value) -> Result<(), String> {
     let data = serde_json::to_vec(val).map_err(|e| e.to_string())?;
     stream
-        .try_write(&data)
+        .write_all(&data)
         .map_err(|e| e.to_string())?;
     Ok(())
 }
 
-fn recv_json(stream: &UnixStream) -> Result<Value, String> {
+fn recv_json(stream: &mut UnixStream) -> Result<Value, String> {
     let mut buf = Vec::new();
     let mut tmp = [0u8; 4096];
     loop {

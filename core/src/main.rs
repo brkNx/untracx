@@ -98,11 +98,12 @@ fn run(cli: Cli) -> Result<(), String> {
             io::stdin()
                 .read_to_string(&mut private_b64)
                 .map_err(|e| e.to_string())?;
-            let private_b64 = private_b64.trim();
-            if private_b64.is_empty() {
+            let trimmed = private_b64.trim();
+            if trimmed.is_empty() {
+                private_b64.zeroize();
                 return Err("stdin boş; özel anahtarı pipe ile gönderin".into());
             }
-            let pubkey = keys::public_from_private(private_b64)?;
+            let pubkey = keys::public_from_private(trimmed)?;
             private_b64.zeroize();
             println!("{}", pubkey);
         }
@@ -119,13 +120,14 @@ fn run(cli: Cli) -> Result<(), String> {
             io::stdin()
                 .read_to_string(&mut private_b64)
                 .map_err(|e| e.to_string())?;
-            let private_b64 = private_b64.trim();
-            if private_b64.is_empty() {
+            let trimmed = private_b64.trim();
+            if trimmed.is_empty() {
+                private_b64.zeroize();
                 return Err("stdin boş; özel anahtarı pipe ile gönderin".into());
             }
-            keys::validate_private(private_b64)?;
+            keys::validate_private(trimmed)?;
             let cfg = config::ClientConfig {
-                client_private: private_b64,
+                client_private: trimmed,
                 server_public: &server_public,
                 server_ip: &server_ip,
                 client_ip: &client_ip,
