@@ -1,28 +1,28 @@
-import React, { useState, useEffect } from 'react';
-import { vpnStatus } from '../lib/helper';
+import React, { useState } from 'react';
 
-export default function StatusPanel() {
+interface Props {
+  onRefresh: () => Promise<void>;
+}
+
+export default function StatusPanel({ onRefresh }: Props) {
   const [wgShow, setWgShow] = useState<string | null>(null);
 
   const refresh = async () => {
     try {
-      const result = await vpnStatus();
+      await onRefresh();
+      const result = await (await import('../lib/helper')).vpnStatus();
       setWgShow(JSON.stringify(result, null, 2));
     } catch (e: any) {
       setWgShow(`Hata: ${e}`);
     }
   };
 
-  useEffect(() => {
-    refresh();
-  }, []);
-
   return (
     <div style={{ marginTop: '1rem' }}>
       <h2>WireGuard Durumu</h2>
       <button onClick={refresh}>Yenile</button>
       {wgShow && (
-        <pre style={{ marginTop: '0.5rem', padding: '0.5rem', background: '#f5f5f5', borderRadius: '4px', whiteSpace: 'pre-wrap' }}>
+        <pre style={{ marginTop: '0.5rem', padding: '0.5rem', background: '#f5f5f5', borderRadius: '4px', whiteSpace: 'pre-wrap', fontSize: '0.85em' }}>
           {wgShow}
         </pre>
       )}

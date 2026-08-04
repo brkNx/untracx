@@ -132,6 +132,33 @@ curl -4 https://api.ipify.org
 
 Çıktı sunucu endpoint'i olmalıdır. DNS ve kill-switch testleri tamamlanmadan istemciyi “sızıntısız” kabul etmeyin.
 
+## GUI (Tauri 2 + React)
+
+`gui/` dizinde Tauri 2 + React scaffold hazır.
+
+### Kurulum
+
+```bash
+cd gui/frontend
+npm install
+npm run dev   # geliştirme sunucusu (http://localhost:5173)
+```
+
+### Tauri komutları
+
+| Komut | Açıklama |
+|---|---|
+| `helper_start` | systemd user service olarak helper'ı başlat |
+| `helper_stop` | helper servisini durdur |
+| `helper_status` | helper durumu + socket bilgisi |
+| `vpn_connect` | Config dosyasıyla VPN bağlantısı |
+| `vpn_down` | Arayüz adıyla VPN bağlantısını kes |
+| `vpn_status` | WireGuard durumunu sorgula |
+
+### Yapılandırma
+
+`gui/tauri.conf.json` ürün adını, versiyonunu ve pencere boyutlarını içerir. `gui/frontend/src/lib/helper.ts` Tauri API çağrılarını wrapper'lar.
+
 ## Geliştirici kontrolleri
 
 ```bash
@@ -146,9 +173,10 @@ curl -4 https://api.ipify.org
 - [x] Peer ekleme ve iptal etme
 - [x] Rust CLI güvenlik sertleştirmesi (stdin okuma, private key gizleme, path traversal koruması, libc FFI)
 - [x] Ayrıcalıklı helper protokolü (Unix socket + systemd servisi)
+- [x] Tauri 2 + React GUI scaffold (gui/)
 - [ ] Gerçek cihazla WireGuard handshake ve IPv4/DNS egress testi
 - [ ] Linux/macOS/Windows için ayrı ayrı kill-switch ve DNS leak testleri
-- [ ] Tauri 2 + React GUI
+- [ ] GUI geliştirme (bağlantı paneli, durum gösterimi, peer yönetimi)
 - [ ] İmzasız kişisel paketler; dağıtım yapılırsa kod imzalama
 
 ## Lisans
