@@ -7,7 +7,11 @@ use std::fs;
 use std::path::Path;
 
 #[derive(Parser)]
-#[command(name = "untracx", version, about = "Ücretsiz kişisel VPN — WireGuard çekirdek CLI")]
+#[command(
+    name = "untracx",
+    version,
+    about = "Ücretsiz kişisel VPN — WireGuard çekirdek CLI"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,

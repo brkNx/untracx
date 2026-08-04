@@ -1,50 +1,67 @@
 # Mimari
 
-```
-┌─────────────────────────────────────────────┐
-│ React GUI (Tauri webview)                   │
-├─────────────────────────────────────────────┤
-│ Tauri Rust backend                          │
-├─────────────────────────────────────────────┤
-│ core CLI (bu repo)                          │
-│  keys / config / connect / status / down    │
-├─────────────────────────────────────────────┤
-│ Yükseltilmiş helper (root/admin)            │
-│  wg-quick  VEYA  wireguard-go               │
-├─────────────────────────────────────────────┤
-│ TUN arayüzü + sistem rotaları               │
-└─────────────────────────────────────────────┘
+## Aşama 1: çalışan MVP
+
+```text
+WireGuard istemcisi
+  -> UDP 51820
+Ubuntu 24.04 VM
+  -> kernel WireGuard (wg0: 10.66.66.1/24)
+  -> UFW + dar kapsamlı forwarding/NAT
+  -> OCI public network interface
+  -> Internet
+
+VPN istemcisi -> 10.66.66.1:53 -> Unbound recursive DNS
 ```
 
-## Kararlar
+Sunucu x86_64 ve arm64 üzerinde aynı Ubuntu paketlerini kullanır. Dış ağ arayüzü default route üzerinden bulunur; `eth0` sabitlenmez.
 
-| Karar | Seçim | Neden |
-|---|---|---|
-| Protokol | WireGuard | En hızlı, modern, ~4k satır, her platformda |
-| Çekirdek | Rust | Güvenli, tek kod tabanı, Tauri ile aynı dil |
-| Sunucu | Oracle Always Free ARM | Ömür boyu ücretsiz, 10 TB/ay trafik |
-| Bölge | Frankfurt | TR ~35ms, AZ ~55ms dengeli gecikme |
-| GUI | Tauri 2 + React | Hafif, sistem tepsis, üç platforma tek paket |
-| Ayrıcalık | Ayrı helper process | GUI root'ta çalışmaz; yalnız küçük helper yükselir |
+## Aşama 2+: masaüstü istemcisi
 
-## Platform yükseltme matrisi
+```text
+React GUI (normal kullanıcı)
+  -> Tauri/Rust uygulaması
+  -> kimliği doğrulanmış yerel IPC
+  -> küçük, ayrıcalıklı helper
+  -> işletim sisteminin WireGuard backend'i
+  -> platform firewall + DNS yönetimi
+```
 
-| Platform | Yöntem | Paket |
-|---|---|---|
-| Windows | Admin token + service / named pipe | MSI |
-| macOS | launchd root helper (AuthorizationServices) | DMG |
-| Linux | pkexec/polkit + systemd | .deb/.rpm/AppImage |
+GUI hiçbir platformda root/Admin olarak çalıştırılmayacaktır. Helper yalnız önceden tanımlı profil ve ağ işlemlerini kabul edecek; serbest komut veya serbest dosya yolu çalıştırmayacaktır.
 
-## Anahtar hijyeni
+## Güven sınırları
 
-- Sunucu PrivateKey: yalnızca `/etc/wireguard/wg0.private.key` (chmod 600)
-- İstemci anahtarları: `*.conf` ve `*.key` gitignore'da — repo'ya asla girmez
-- `genconfig` çıktıyı 0600 izniyle yazar
-- add-peer çıktısını cihaza kopyaladıktan sonra sunucudan silin
+| Sınır | Güven kararı |
+|---|---|
+| GUI -> helper | Karşı uç kimliği ve mesaj şeması doğrulanmalı |
+| Client config | 0600/OS key store; loglarda secret yok |
+| VPS | Sunucu private key yalnız `/etc/wireguard`, root 0600 |
+| Peer yaşam döngüsü | Her cihaz ayrı key + PSK; kayıp cihaz tek başına iptal edilir |
+| DNS | Yalnız `10.66.66.0/24` erişebilir; public 53 kapalıdır |
+| Güncelleme | İmzalı uygulama güncellemesi olmadan otomatik update yok |
 
-## Ağ detayları
+## Platform matrisi
 
-- Alt ağ: `10.66.66.0/24`, sunucu `.1`, istemciler `.2`'den itibaren otomatik
-- DNS: tünel içi 10.66.66.1 (sızıntı koruması)
-- MTU: 1420 (Orta Doğu/AVR ağları için güvenli)
-- PersistentKeepalive: 25s (NAT arkası cihazlar için zorunlu)
+| Platform | Tünel backend'i | Ayrıcalık modeli | Kill-switch hedefi |
+|---|---|---|---|
+| Windows | WireGuardNT / resmi WireGuard service | Windows service + named pipe ACL | Windows Filtering Platform |
+| macOS | Network Extension veya resmi WireGuard entegrasyonu | imzalı helper/entitlement | Network Extension kuralları |
+| Linux | kernel WireGuard + wg-quick | polkit + systemd helper | nftables/iptables policy |
+
+Platform backend'i seçimi uygulama koduna başlanmadan küçük PoC'lerle doğrulanacaktır. `wireguard-go` tüm platformlarda aynı şekilde paketlenecek varsayımı yapılmamıştır.
+
+## Ağ kararları
+
+- İlk sürüm IPv4 internet çıkışı sağlar.
+- İstemci profili `::/0` rotasını tünele yollar; sunucu IPv6 çıkışı sağlamadığı için aktif tünelde IPv6 interneti çalışmayabilir.
+- Tünel düştüğünde leak engellemek yalnız rota ayarıyla garanti edilmez; platform firewall'ı gereklidir.
+- Varsayılan MTU 1420'dir; mobil ağ testlerinde gerekirse düşürülecektir.
+- `PersistentKeepalive = 25` yalnız istemci tarafında kullanılır.
+
+## Değiştirilmeyecek güvenlik ilkeleri
+
+- Private key veya PSK stdout/log/telemetry'ye yazılmaz.
+- GUI root/Admin çalıştırılmaz.
+- Sunucu bootstrap mevcut peer config'ini sessizce ezmez.
+- Kayıp cihaz için tüm sunucuyu yeniden kurmak yerine tek peer iptal edilir.
+- “Bağlandı” göstergesi yalnız process durumuna değil, güncel handshake ve egress testine dayanır.
