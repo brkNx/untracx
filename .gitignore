@@ -1,0 +1,17 @@
+# Rust
+/target
+**/target/
+
+# OS
+.DS_Store
+
+# Anahtarlar — asla repo'ya girmez
+*.conf
+!server/*.template
+!server/*.example
+*.key
+!scripts/*.sh
+
+# Editor
+.vscode/
+.idea/

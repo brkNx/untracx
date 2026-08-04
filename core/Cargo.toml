@@ -1,0 +1,15 @@
+[package]
+name = "untracx"
+version = "0.1.0"
+edition = "2021"
+description = "Ücretsiz kişisel VPN — WireGuard tabanlı çekirdek CLI"
+
+[dependencies]
+x25519-dalek = { version = "2", features = ["static_secrets"] }
+rand = "0.8"
+base64 = "0.22"
+clap = { version = "4", features = ["derive"] }
+
+[profile.release]
+lto = true
+strip = true
