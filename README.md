@@ -2,7 +2,7 @@
 
 Kişisel kullanım için WireGuard tabanlı VPN projesi. Hedef; önce güvenli ve tekrar üretilebilir bir sunucu kurulumu, ardından Rust/Tauri tabanlı masaüstü istemcisidir.
 
-> Durum: Aşama 1 tamamlandı. Sunucu Oracle Cloud Always Free (Ubuntu 24.04 x86_64) üzerinde kurulu ve çalışıyor; peer yönetimi hazır. Sıradaki adım gerçek cihazla handshake/egress testi; platforma özel kill-switch ve GUI henüz tamamlanmadı.
+> Durum: Aşama 1 tamamlandı. Sunucu Oracle Cloud Always Free (Ubuntu 24.04 x86_64) üzerinde kurulu ve çalışıyor; peer yönetimi, Rust CLI güvenlik sertleştirmesi, ayrıcalıklı helper protokolü, Tauri 2 + React GUI ve platforma özel kill-switch scriptleri hazır. Sıradaki adım gerçek cihazla handshake/egress testi ve GUI geliştirmesinin tamamlanması.
 
 ## Canlı sunucu
 
@@ -161,46 +161,15 @@ npm run dev   # geliştirme sunucusu (http://localhost:5173)
 
 ## Kill-switch ve DNS leak koruması
 
-Kill-switch, VPN tüneli kesildiğinde internet trafişinin VPN dışına sızmasını engeller. Aşama 2'de platforma özel kill-switch eklenecek:
-
-| Platform | Kill-switch yöntemi |
-|---|---|
-| Linux | nftables/iptables policy + `AllowedIPs` |
-| macOS | Network Extension kuralları |
-| Windows | Windows Filtering Platform |
-
-### DNS leak koruması
-
-Sunucu DNS'i yalnız VPN alt ağından kabul eder (`10.66.66.0/24`). Public 53 kapalıdır. İstemci tarafında `DNS = 10.66.66.1` ayarı tüm DNS sorgularını tünelden yönlendirir.
-
-Doğrulama:
-```bash
-# VPN bağlıyken
-dig @10.66.66.1 google.com
-# → VPN DNS'den çözümlemeli
-
-# VPN kesildikten sonra
-dig @10.66.66.1 google.com
-# → timeout olmalı (leak yok)
-```
-
-## Geliştirici kontrolleri
-
-```bash
-./scripts/check.sh
-```
-
-## Kill-switch
-
-Platformlara özel kill-switch scriptleri `scripts/` klasorunde bulunur:
+Kill-switch, VPN tüneli kesildiğinde internet trafiğinin VPN dışına sızmasını engeller. Platformlara özel kill-switch scriptleri `scripts/` klasöründe bulunur:
 
 | Platform | Script | Mekanizma |
 |---|---|---|
 | Linux | `scripts/killswitch-linux.sh` | nftables (forward/output chain) |
 | macOS | `scripts/killswitch-macos.sh` | ApplicationFirewall (socketfilterfw) |
-| Windows | `scripts/killswitch-windows.ps1` | WFP (New-NetFirewallRule) |
+| Windows | `scripts/killswitch-windows.ps1` | Windows Filtering Platform (New-NetFirewallRule) |
 
-Kullanim:
+Kullanım:
 
 ```bash
 # Linux
@@ -213,15 +182,17 @@ sudo bash scripts/killswitch-macos.sh ac
 sudo bash scripts/killswitch-macos.sh kapat
 sudo bash scripts/killswitch-macos.sh durum
 
-# Windows (PowerShell, yonetici)
+# Windows (PowerShell, yönetici)
 .\scripts\killswitch-windows.ps1 ac
 .\scripts\killswitch-windows.ps1 kapat
 .\scripts\killswitch-windows.ps1 durum
 ```
 
-### DNS leak testi
+### DNS leak koruması
 
-Kill-switch aktifken DNS sorgularinin tumune gidebildigini test edin:
+Sunucu DNS'i yalnız VPN alt ağından kabul eder (`10.66.66.0/24`). Public 53 kapalıdır. İstemci tarafında `DNS = 10.66.66.1` ayarı tüm DNS sorgularını tünelden yönlendirir.
+
+Kill-switch aktifken DNS sorgularının ISP DNS sunucusuna sızmadığını doğrulayın:
 
 ```bash
 # Linux/macOS
@@ -231,7 +202,15 @@ dig +short myip.opendns.com @resolver1.opendns.com
 Resolve-DnsName myip.opendns.com -Server 208.67.222.222
 ```
 
-Sonuc VPN sunucunun IP'sini gostermeli, ISP DNS sunucusunu gostermemelidir.
+Sonuç VPN sunucunun IP'sini göstermeli, ISP DNS sunucusunu göstermemelidir. VPN kesildikten sonra `dig @10.66.66.1 google.com` timeout olmalı (leak yok).
+
+## Geliştirici kontrolleri
+
+```bash
+./scripts/check.sh
+```
+
+Bu komut; shell scriptlerini (syntax + shellcheck), core ve GUI Rust kodunu (fmt, test, clippy) ve frontend'i (tsc + vite build) denetler.
 
 ## Yol haritası
 
@@ -242,10 +221,10 @@ Sonuc VPN sunucunun IP'sini gostermeli, ISP DNS sunucusunu gostermemelidir.
 - [x] Rust CLI güvenlik sertleştirmesi (stdin okuma, private key gizleme, path traversal koruması, libc FFI)
 - [x] Ayrıcalıklı helper protokolü (Unix socket + systemd servisi)
 - [x] Tauri 2 + React GUI scaffold (gui/)
-- [ ] Gerçek cihazla WireGuard handshake ve IPv4/DNS egress testi
-- [ ] Linux/macOS/Windows için ayrı ayrı kill-switch ve DNS leak testleri
-- [ ] GUI geliştirme (bağlantı paneli, durum gösterimi, peer yönetimi)
-- [ ] İmzasız kişisel paketler; dağıtım yapılırsa kod imzalama
+- [x] Kill-switch scriptleri (Linux nftables, macOS ApplicationFirewall, Windows WFP)
+- [x] Paket imzalama ve release workflow (scripts/sign-package.sh, .github/workflows/release.yml)
+- [ ] Gerçek cihazla WireGuard handshake ve IPv4/DNS egress testi (scripts/test-connection.sh hazır)
+- [ ] GUI geliştirmesinin tamamlanması (bağlantı paneli, durum gösterimi, peer yönetimi)
 
 ## Lisans
 

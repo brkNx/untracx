@@ -1,12 +1,8 @@
-mod config;
-mod helper;
-mod keys;
-mod wireguard;
-
 use clap::{Parser, Subcommand};
 use std::fs;
 use std::io::{self, Read as _};
 use std::path::Path;
+use untracx::{config, helper, keys, wireguard};
 use zeroize::Zeroize;
 
 #[derive(Parser)]
@@ -43,8 +39,6 @@ enum Commands {
         port: u16,
         #[arg(short, long, default_value = "client.conf")]
         output: String,
-        #[arg(long)]
-        stdin: bool,
     },
     /// VPN'i bağla (root gerekir): sudo untracx connect client.conf
     Connect { config: String },
@@ -135,7 +129,6 @@ fn run(cli: Cli) -> Result<(), String> {
             mtu,
             port,
             output,
-            stdin,
         } => {
             let mut private_b64 = String::new();
             io::stdin()

@@ -132,9 +132,7 @@ fn cmd_connect_req(req: &Value) -> Value {
     if iface.is_empty() {
         return json!({"ok": false, "error": "Gecersiz config dosya adi"});
     }
-    let out = Command::new("wg-quick")
-        .args(["up", &iface])
-        .output();
+    let out = Command::new("wg-quick").args(["up", &iface]).output();
     match out {
         Ok(o) if o.status.success() => json!({"ok": true, "iface": iface}),
         Ok(o) => json!({"ok": false, "error": String::from_utf8_lossy(&o.stderr).to_string()}),
@@ -150,9 +148,7 @@ fn cmd_down_req(req: &Value) -> Value {
     if !is_valid_iface_name(iface) {
         return json!({"ok": false, "error": "Gecersiz arayuz adi"});
     }
-    let out = Command::new("wg-quick")
-        .args(["down", iface])
-        .output();
+    let out = Command::new("wg-quick").args(["down", iface]).output();
     match out {
         Ok(o) if o.status.success() => json!({"ok": true, "iface": iface}),
         Ok(o) => json!({"ok": false, "error": String::from_utf8_lossy(&o.stderr).to_string()}),
@@ -200,14 +196,14 @@ fn allowed_config_dirs() -> Vec<String> {
 fn is_valid_iface_name(name: &str) -> bool {
     !name.is_empty()
         && name.len() <= 15
-        && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '+' || c == '=' || c == '.' || c == '-')
+        && name.chars().all(|c| {
+            c.is_ascii_alphanumeric() || c == '_' || c == '+' || c == '=' || c == '.' || c == '-'
+        })
 }
 
 fn send_json(stream: &mut UnixStream, val: &Value) -> Result<(), String> {
     let data = serde_json::to_vec(val).map_err(|e| e.to_string())?;
-    stream
-        .write_all(&data)
-        .map_err(|e| e.to_string())?;
+    stream.write_all(&data).map_err(|e| e.to_string())?;
     Ok(())
 }
 

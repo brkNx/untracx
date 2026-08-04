@@ -120,10 +120,10 @@ function App() {
       </p>
 
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-        <button onClick={handleStartHelper} disabled={loading || helperRunning}>
+        <button onClick={handleStartHelper} disabled={loading || helperRunning === true}>
           Helper Başlat
         </button>
-        <button onClick={handleStopHelper} disabled={loading || !helperRunning}>
+        <button onClick={handleStopHelper} disabled={loading || helperRunning !== true}>
           Helper Durdur
         </button>
         <button onClick={refreshHelperStatus} disabled={loading}>

@@ -2,7 +2,6 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-GUI_DIR="${REPO_ROOT}/gui"
 CORE_DIR="${REPO_ROOT}/core"
 DIST_DIR="${REPO_ROOT}/dist"
 
@@ -19,21 +18,25 @@ sign_binary() {
   local binary="$1"
   local output="$2"
 
-  if command -v osslsigncode > /dev/null 2>&1; then
+  if command -v osslsigncode > /dev/null 2>&1 && [[ -n "${SIGNING_CERT_PKCS12:-}" ]]; then
     log "Imzaliyor (osslsigncode): ${binary}"
     osslsigncode sign \
-      -pkcs12 "${SIGNING_CERT_PKCS12:-}" \
+      -pkcs12 "${SIGNING_CERT_PKCS12}" \
       -pass "${SIGNING_CERT_PASS:-}" \
       -in "${binary}" \
       -out "${output}" \
       -t http://timestamp.digicert.com \
-      2>/dev/null || cp "${binary}" "${output}"
+      || die "osslsigncode ile imzalama basarisiz: ${binary}"
   elif command -v codesign > /dev/null 2>&1 && [[ "$(uname -s)" == "Darwin" ]]; then
     log "Imzaliyor (codesign, macOS): ${binary}"
-    codesign --sign "${CODESIGN_IDENTITY:-}" --force "${binary}" 2>/dev/null || true
+    if [[ -n "${CODESIGN_IDENTITY:-}" ]]; then
+      codesign --sign "${CODESIGN_IDENTITY}" --force "${binary}" || die "codesign basarisiz"
+    else
+      log "CODESIGN_IDENTITY bos; imzasiiz kopyalaniyor"
+    fi
     cp "${binary}" "${output}"
   else
-    log "Imzalama araci bulunamadi; imzasiiz kopyalanıyor"
+    log "Imzalama araci/sertifika bulunamadi; imzasiz kopyalaniyor"
     cp "${binary}" "${output}"
   fi
 }

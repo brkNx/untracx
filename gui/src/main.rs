@@ -26,8 +26,7 @@ fn helper_stop() -> Result<String, String> {
 
 #[tauri::command]
 fn helper_status() -> Result<serde_json::Value, String> {
-    let active = run_systemctl(&["--user", "is-active", "untracx-helper"])
-        .unwrap_or_default();
+    let active = run_systemctl(&["--user", "is-active", "untracx-helper"]).unwrap_or_default();
     let running = active == "active";
     let sock = helper::sock_path();
     let sock_exists = std::path::Path::new(&sock).exists();
@@ -80,7 +79,9 @@ fn peer_add(name: String) -> Result<serde_json::Value, String> {
         .output()
         .map_err(|e| e.to_string())?;
     if output.status.success() {
-        Ok(serde_json::json!({"ok": true, "output": String::from_utf8_lossy(&output.stdout).to_string()}))
+        Ok(
+            serde_json::json!({"ok": true, "output": String::from_utf8_lossy(&output.stdout).to_string()}),
+        )
     } else {
         Err(String::from_utf8_lossy(&output.stderr).to_string())
     }
@@ -93,7 +94,9 @@ fn peer_remove(name: String) -> Result<serde_json::Value, String> {
         .output()
         .map_err(|e| e.to_string())?;
     if output.status.success() {
-        Ok(serde_json::json!({"ok": true, "output": String::from_utf8_lossy(&output.stdout).to_string()}))
+        Ok(
+            serde_json::json!({"ok": true, "output": String::from_utf8_lossy(&output.stdout).to_string()}),
+        )
     } else {
         Err(String::from_utf8_lossy(&output.stderr).to_string())
     }

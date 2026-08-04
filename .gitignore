@@ -5,17 +5,20 @@
 # OS
 .DS_Store
 
-# Anahtarlar — asla repo'ya girmez
+# Anahtarlar ve istemci config — asla repo'ya girmez
 *.conf
+*.key
 !server/*.template
 !server/*.example
-*.key
-!scripts/*.sh
 
 # Editor
 .vscode/
 .idea/
 
-# GUI
+# GUI build
 gui/frontend/dist/
 gui/frontend/node_modules/
+gui/gen/
+
+# Paket çıktısı (scripts/sign-package.sh)
+dist/
