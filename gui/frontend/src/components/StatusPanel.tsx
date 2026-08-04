@@ -1,31 +1,31 @@
-import { useState } from 'react'
-import { helperStatus } from '../lib/helper'
+import React, { useState } from 'react';
 
-export function StatusPanel() {
-  const [status, setStatus] = useState('')
-  const [loading, setLoading] = useState(false)
+interface Props {
+  onRefresh: () => Promise<void>;
+}
 
-  const handleRefresh = async () => {
-    setLoading(true)
+export default function StatusPanel({ onRefresh }: Props) {
+  const [wgShow, setWgShow] = useState<string | null>(null);
+
+  const refresh = async () => {
     try {
-      const result = await helperStatus()
-      setStatus(result)
-    } catch (e) {
-      setStatus(String(e))
-    } finally {
-      setLoading(false)
+      await onRefresh();
+      const result = await (await import('../lib/helper')).vpnStatus();
+      setWgShow(JSON.stringify(result, null, 2));
+    } catch (e: any) {
+      setWgShow(`Hata: ${e}`);
     }
-  }
+  };
 
   return (
-    <div style={{ marginTop: '16px' }}>
-      <h2>Status</h2>
-      <button onClick={handleRefresh} disabled={loading}>
-        {loading ? 'Checking...' : 'Refresh'}
-      </button>
-      {status && (
-        <pre style={{ background: '#f5f5f5', padding: '8px', marginTop: '8px' }}>{status}</pre>
+    <div style={{ marginTop: '1rem' }}>
+      <h2>WireGuard Durumu</h2>
+      <button onClick={refresh}>Yenile</button>
+      {wgShow && (
+        <pre style={{ marginTop: '0.5rem', padding: '0.5rem', background: '#f5f5f5', borderRadius: '4px', whiteSpace: 'pre-wrap', fontSize: '0.85em' }}>
+          {wgShow}
+        </pre>
       )}
     </div>
-  )
+  );
 }

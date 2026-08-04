@@ -1,21 +1,13 @@
 [Unit]
-Description=untracx privileged helper (Unix socket IPC)
+Description=untracx privileged helper (WireGuard control)
 After=network.target wg-quick@wg0.service
 Wants=wg-quick@wg0.service
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/untracx-helper
+ExecStart=%h/.local/bin/untracx-helper
 Restart=on-failure
 RestartSec=3
-
-# Security hardening
-NoNewPrivileges=no
-ProtectSystem=strict
-ProtectHome=yes
-ReadWritePaths=/run/user/%u
-PrivateTmp=yes
-SupplementaryGroups=netdev
 
 [Install]
 WantedBy=default.target

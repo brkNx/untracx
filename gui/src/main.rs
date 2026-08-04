@@ -1,77 +1,106 @@
 use untracx::helper;
-use std::io::{BufRead as _, Write as _};
 
-fn send_request(req: &str) -> Result<String, String> {
-    let path = helper::socket_path();
-    let stream = std::os::unix::net::UnixStream::connect(&path).map_err(|e| e.to_string())?;
-    let mut stream = stream;
-    writeln!(stream, "{}", req).map_err(|e| e.to_string())?;
-    let mut reader = std::io::BufReader::new(&mut stream);
-    let mut line = String::new();
-    reader.read_line(&mut line).map_err(|e| e.to_string())?;
-    Ok(line.trim().to_string())
+fn run_systemctl(args: &[&str]) -> Result<String, String> {
+    let output = std::process::Command::new("systemctl")
+        .args(args)
+        .output()
+        .map_err(|e| e.to_string())?;
+    if output.status.success() {
+        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
+    }
 }
 
 #[tauri::command]
 fn helper_start() -> Result<String, String> {
-    let path = helper::socket_path();
-    if path.exists() {
-        return Ok("Helper already running".to_string());
-    }
-    std::thread::spawn(|| {
-        let _ = helper::start_socket_listener();
-    });
-    Ok("Helper started".to_string())
+    run_systemctl(&["--user", "start", "untracx-helper"])
+        .map(|_| "Helper servisi başlatıldı".to_string())
 }
 
 #[tauri::command]
 fn helper_stop() -> Result<String, String> {
-    let path = helper::socket_path();
-    if path.exists() {
-        std::fs::remove_file(&path).map_err(|e| e.to_string())?;
-        Ok("Helper stopped".to_string())
+    run_systemctl(&["--user", "stop", "untracx-helper"])
+        .map(|_| "Helper servisi durduruldu".to_string())
+}
+
+#[tauri::command]
+fn helper_status() -> Result<serde_json::Value, String> {
+    let active = run_systemctl(&["--user", "is-active", "untracx-helper"])
+        .unwrap_or_default();
+    let running = active == "active";
+    let sock = helper::sock_path();
+    let sock_exists = std::path::Path::new(&sock).exists();
+    Ok(serde_json::json!({
+        "running": running,
+        "socketExists": sock_exists,
+        "socketPath": sock,
+        "systemctlStatus": active,
+    }))
+}
+
+#[tauri::command]
+fn vpn_connect(config_path: String) -> Result<serde_json::Value, String> {
+    helper::cmd_connect(&config_path)
+}
+
+#[tauri::command]
+fn vpn_down(iface: String) -> Result<serde_json::Value, String> {
+    helper::cmd_down(&iface)
+}
+
+#[tauri::command]
+fn vpn_status() -> Result<serde_json::Value, String> {
+    helper::cmd_status()
+}
+
+#[tauri::command]
+fn peer_list() -> Result<serde_json::Value, String> {
+    let output = std::process::Command::new("sudo")
+        .args(["wg", "show", "wg0", "peers"])
+        .output()
+        .map_err(|e| e.to_string())?;
+    if output.status.success() {
+        let text = String::from_utf8_lossy(&output.stdout).to_string();
+        let peers: Vec<serde_json::Value> = text
+            .lines()
+            .filter(|l| !l.trim().is_empty())
+            .map(|l| serde_json::json!({"publicKey": l.trim()}))
+            .collect();
+        Ok(serde_json::json!({"ok": true, "peers": peers}))
     } else {
-        Ok("Helper not running".to_string())
+        Err(String::from_utf8_lossy(&output.stderr).to_string())
     }
 }
 
 #[tauri::command]
-fn helper_status() -> Result<String, String> {
-    let req = serde_json::json!({"method": "status"}).to_string();
-    send_request(&req)
+fn peer_add(name: String) -> Result<serde_json::Value, String> {
+    let output = std::process::Command::new("sudo")
+        .args(["untracx-add-peer", &name])
+        .output()
+        .map_err(|e| e.to_string())?;
+    if output.status.success() {
+        Ok(serde_json::json!({"ok": true, "output": String::from_utf8_lossy(&output.stdout).to_string()}))
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).to_string())
+    }
 }
 
 #[tauri::command]
-fn vpn_connect(config: String) -> Result<String, String> {
-    let req = serde_json::json!({"method": "start", "config": config}).to_string();
-    send_request(&req)
+fn peer_remove(name: String) -> Result<serde_json::Value, String> {
+    let output = std::process::Command::new("sudo")
+        .args(["untracx-remove-peer", &name])
+        .output()
+        .map_err(|e| e.to_string())?;
+    if output.status.success() {
+        Ok(serde_json::json!({"ok": true, "output": String::from_utf8_lossy(&output.stdout).to_string()}))
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).to_string())
+    }
 }
 
-#[tauri::command]
-fn vpn_down(config: String) -> Result<String, String> {
-    let req = serde_json::json!({"method": "stop", "config": config}).to_string();
-    send_request(&req)
-}
-
-#[tauri::command]
-fn peer_list() -> Result<String, String> {
-    let req = serde_json::json!({"method": "status"}).to_string();
-    send_request(&req)
-}
-
-#[tauri::command]
-fn peer_add(name: String) -> Result<String, String> {
-    let req = serde_json::json!({"method": "add_peer", "name": name}).to_string();
-    send_request(&req)
-}
-
-#[tauri::command]
-fn peer_remove(name: String) -> Result<String, String> {
-    let req = serde_json::json!({"method": "remove_peer", "name": name}).to_string();
-    send_request(&req)
-}
-
-fn main() {
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             helper_start,
@@ -79,10 +108,15 @@ fn main() {
             helper_status,
             vpn_connect,
             vpn_down,
+            vpn_status,
             peer_list,
             peer_add,
             peer_remove,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .expect("error while running tauri app");
+}
+
+fn main() {
+    run();
 }

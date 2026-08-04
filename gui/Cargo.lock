@@ -3752,7 +3752,6 @@ dependencies = [
  "clap",
  "libc",
  "rand",
- "serde",
  "serde_json",
  "x25519-dalek",
  "zeroize",
@@ -3767,6 +3766,7 @@ dependencies = [
  "tauri",
  "tauri-build",
  "untracx",
+ "zeroize",
 ]
 
 [[package]]

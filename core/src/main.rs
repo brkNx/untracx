@@ -1,8 +1,13 @@
-use untracx::{config, keys, wireguard};
+mod config;
+mod helper;
+mod keys;
+mod wireguard;
+
 use clap::{Parser, Subcommand};
 use std::fs;
 use std::io::{self, Read as _};
 use std::path::Path;
+use zeroize::Zeroize;
 
 #[derive(Parser)]
 #[command(
@@ -17,15 +22,13 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Yeni istemci anahtar çifti üret (base64)
+    /// Yeni istemci anahtar çifti üret (base64). Özel anahtar stdout'a yazılmaz.
     Keygen,
-    /// Özel anahtardan genel anahtar türet
-    Pubkey { private_key: String },
-    /// İstemci WireGuard config dosyası üret
+    /// Özel anahtardan genel anahtar türet (stdin'den okur)
+    Pubkey,
+    /// İstemci WireGuard config dosyası üret (stdin'den private key okur)
     #[command(name = "genconfig")]
     GenConfig {
-        #[arg(long)]
-        client_private: String,
         #[arg(long)]
         server_public: String,
         #[arg(long)]
@@ -43,7 +46,7 @@ enum Commands {
         #[arg(long)]
         stdin: bool,
     },
-    /// VPN'i bağla (root gerekir):  sudo untracx connect client.conf
+    /// VPN'i bağla (root gerekir): sudo untracx connect client.conf
     Connect { config: String },
     /// VPN'i bağla; özel anahtar stdin'den okunur (root gerekir)
     #[command(name = "connect-stdin")]
@@ -67,6 +70,32 @@ enum Commands {
     Down { config: String },
     /// Bağlantı durumunu göster
     Status,
+    /// Ayrıcalıklı helper servisini başlat/kontrol et (root gerekir)
+    #[command(name = "helper")]
+    Helper {
+        #[command(subcommand)]
+        action: HelperAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum HelperAction {
+    /// Helper servisini başlat (systemd user service)
+    Start,
+    /// Helper servisini durdur
+    Stop,
+    /// Helper servisi durumunu göster
+    Status,
+}
+
+impl From<HelperAction> for helper::HelperAction {
+    fn from(a: HelperAction) -> Self {
+        match a {
+            HelperAction::Start => helper::HelperAction::Start,
+            HelperAction::Stop => helper::HelperAction::Stop,
+            HelperAction::Status => helper::HelperAction::Status,
+        }
+    }
 }
 
 fn main() {
@@ -81,14 +110,24 @@ fn run(cli: Cli) -> Result<(), String> {
     match cli.command {
         Commands::Keygen => {
             let kp = keys::generate();
-            println!("PrivateKey: {}", kp.private);
-            println!("PublicKey: {}", kp.public);
+            eprintln!("Özel anahtar stdout'a yazılmadı; güvenli şekilde kaydedin.");
+            println!("{}", kp.public);
         }
-        Commands::Pubkey { private_key } => {
-            println!("{}", keys::public_from_private(&private_key)?);
+        Commands::Pubkey => {
+            let mut private_b64 = String::new();
+            io::stdin()
+                .read_to_string(&mut private_b64)
+                .map_err(|e| e.to_string())?;
+            let trimmed = private_b64.trim();
+            if trimmed.is_empty() {
+                private_b64.zeroize();
+                return Err("stdin boş; özel anahtarı pipe ile gönderin".into());
+            }
+            let pubkey = keys::public_from_private(trimmed)?;
+            private_b64.zeroize();
+            println!("{}", pubkey);
         }
         Commands::GenConfig {
-            client_private,
             server_public,
             server_ip,
             client_ip,
@@ -98,13 +137,18 @@ fn run(cli: Cli) -> Result<(), String> {
             output,
             stdin,
         } => {
-            let private_key = if stdin {
-                read_private_key_from_stdin()?
-            } else {
-                client_private
-            };
+            let mut private_b64 = String::new();
+            io::stdin()
+                .read_to_string(&mut private_b64)
+                .map_err(|e| e.to_string())?;
+            let trimmed = private_b64.trim();
+            if trimmed.is_empty() {
+                private_b64.zeroize();
+                return Err("stdin boş; özel anahtarı pipe ile gönderin".into());
+            }
+            keys::validate_private(trimmed)?;
             let cfg = config::ClientConfig {
-                client_private: &private_key,
+                client_private: trimmed,
                 server_public: &server_public,
                 server_ip: &server_ip,
                 client_ip: &client_ip,
@@ -118,6 +162,7 @@ fn run(cli: Cli) -> Result<(), String> {
             set_perms_600(&output);
             println!("✓ {output} yazıldı");
             println!("Bağlanmak için: sudo untracx connect {output}");
+            private_b64.zeroize();
         }
         Commands::Connect { config } => {
             validate_config_path(&config)?;
@@ -154,6 +199,7 @@ fn run(cli: Cli) -> Result<(), String> {
             wireguard::down(&config)?
         }
         Commands::Status => wireguard::status()?,
+        Commands::Helper { action } => helper::run(helper::HelperAction::from(action))?,
     }
     Ok(())
 }

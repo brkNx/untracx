@@ -2,7 +2,19 @@
 
 Kişisel kullanım için WireGuard tabanlı VPN projesi. Hedef; önce güvenli ve tekrar üretilebilir bir sunucu kurulumu, ardından Rust/Tauri tabanlı masaüstü istemcisidir.
 
-> Durum: Aşama 1 sürüyor. Sunucu bootstrap ve peer yönetimi hazır; platformlara özel gerçek kill-switch ve GUI henüz tamamlanmadı.
+> Durum: Aşama 1 tamamlandı. Sunucu Oracle Cloud Always Free (Ubuntu 24.04 x86_64) üzerinde kurulu ve çalışıyor; peer yönetimi hazır. Sıradaki adım gerçek cihazla handshake/egress testi; platforma özel kill-switch ve GUI henüz tamamlanmadı.
+
+## Canlı sunucu
+
+| Alan | Değer |
+|---|---|
+| Provider | Oracle Cloud Always Free |
+| OS | Ubuntu 24.04 (x86_64) |
+| Public IP | `158.180.50.114` |
+| Endpoint | `158.180.50.114:51820/udp` |
+| VPN alt ağı | `10.66.66.0/24` |
+| VPN DNS | `10.66.66.1` (Unbound, yalnız VPN alt ağı) |
+| Durum | Kurulum tamam; gerçek cihaz testi bekleniyor |
 
 ## Ne sağlar, ne sağlamaz?
 
@@ -120,6 +132,58 @@ curl -4 https://api.ipify.org
 
 Çıktı sunucu endpoint'i olmalıdır. DNS ve kill-switch testleri tamamlanmadan istemciyi “sızıntısız” kabul etmeyin.
 
+## GUI (Tauri 2 + React)
+
+`gui/` dizinde Tauri 2 + React scaffold hazır.
+
+### Kurulum
+
+```bash
+cd gui/frontend
+npm install
+npm run dev   # geliştirme sunucusu (http://localhost:5173)
+```
+
+### Tauri komutları
+
+| Komut | Açıklama |
+|---|---|
+| `helper_start` | systemd user service olarak helper'ı başlat |
+| `helper_stop` | helper servisini durdur |
+| `helper_status` | helper durumu + socket bilgisi |
+| `vpn_connect` | Config dosyasıyla VPN bağlantısı |
+| `vpn_down` | Arayüz adıyla VPN bağlantısını kes |
+| `vpn_status` | WireGuard durumunu sorgula |
+
+### Yapılandırma
+
+`gui/tauri.conf.json` ürün adını, versiyonunu ve pencere boyutlarını içerir. `gui/frontend/src/lib/helper.ts` Tauri API çağrılarını wrapper'lar.
+
+## Kill-switch ve DNS leak koruması
+
+Kill-switch, VPN tüneli kesildiğinde internet trafişinin VPN dışına sızmasını engeller. Aşama 2'de platforma özel kill-switch eklenecek:
+
+| Platform | Kill-switch yöntemi |
+|---|---|
+| Linux | nftables/iptables policy + `AllowedIPs` |
+| macOS | Network Extension kuralları |
+| Windows | Windows Filtering Platform |
+
+### DNS leak koruması
+
+Sunucu DNS'i yalnız VPN alt ağından kabul eder (`10.66.66.0/24`). Public 53 kapalıdır. İstemci tarafında `DNS = 10.66.66.1` ayarı tüm DNS sorgularını tünelden yönlendirir.
+
+Doğrulama:
+```bash
+# VPN bağlıyken
+dig @10.66.66.1 google.com
+# → VPN DNS'den çözümlemeli
+
+# VPN kesildikten sonra
+dig @10.66.66.1 google.com
+# → timeout olmalı (leak yok)
+```
+
 ## Geliştirici kontrolleri
 
 ```bash
@@ -173,16 +237,15 @@ Sonuc VPN sunucunun IP'sini gostermeli, ISP DNS sunucusunu gostermemelidir.
 
 - [x] Private repo ve ilk Rust CLI iskeleti
 - [x] Güvenli/idempotent Ubuntu sunucu bootstrap
+- [x] Oracle Cloud Always Free sunucu kurulumu (`158.180.50.114`, Ubuntu 24.04 x86_64)
 - [x] Peer ekleme ve iptal etme
-- [x] Rust CLI güvenlik sertleştirmesi (stdin private key, path traversal, libc FFI, secret zeroing)
-- [x] Ayrıcalıklı helper protokolü (Unix socket + systemd service)
-- [x] Linux kill-switch (nftables)
-- [x] Windows kill-switch (WFP)
-- [x] macOS kill-switch (ApplicationFirewall)
-- [x] DNS leak test dokümantasyonu
-- [x] Tauri 2 + React GUI scaffold
+- [x] Rust CLI güvenlik sertleştirmesi (stdin okuma, private key gizleme, path traversal koruması, libc FFI)
+- [x] Ayrıcalıklı helper protokolü (Unix socket + systemd servisi)
+- [x] Tauri 2 + React GUI scaffold (gui/)
 - [ ] Gerçek cihazla WireGuard handshake ve IPv4/DNS egress testi
-- [ ] İmzalı paket dağıtımı (signing + release workflow)
+- [ ] Linux/macOS/Windows için ayrı ayrı kill-switch ve DNS leak testleri
+- [ ] GUI geliştirme (bağlantı paneli, durum gösterimi, peer yönetimi)
+- [ ] İmzasız kişisel paketler; dağıtım yapılırsa kod imzalama
 
 ## Lisans
 

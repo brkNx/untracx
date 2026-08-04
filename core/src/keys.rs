@@ -17,12 +17,17 @@ pub fn generate() -> KeyPair {
     }
 }
 
+pub fn validate_private(private_b64: &str) -> Result<[u8; 32], String> {
+    let raw = B64
+        .decode(private_b64.trim())
+        .map_err(|e| e.to_string())?;
+    raw.try_into()
+        .map_err(|_| "Özel anahtar 32 bayt olmalı (base64)".to_string())
+}
+
 pub fn public_from_private(private_b64: &str) -> Result<String, String> {
-    let decoded = B64.decode(private_b64.trim()).map_err(|e| e.to_string())?;
-    let mut raw_array: [u8; 32] = decoded
-        .try_into()
-        .map_err(|_| "Anahtar 32 bayt olmalı (base64)".to_string())?;
-    let secret = StaticSecret::from(raw_array);
+    let raw = validate_private(private_b64)?;
+    let secret = StaticSecret::from(raw);
     let public = PublicKey::from(&secret);
     raw_array.zeroize();
     Ok(B64.encode(public.as_bytes()))

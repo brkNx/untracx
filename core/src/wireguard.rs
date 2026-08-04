@@ -80,6 +80,11 @@ pub fn status() -> Result<(), String> {
 
 fn resolve_interface(config_path: &str) -> Result<ConnInfo, String> {
     let p = Path::new(config_path);
+    for component in p.components() {
+        if let std::path::Component::ParentDir = component {
+            return Err("Config dosya yolu '..' içeremez".into());
+        }
+    }
     let stem = p
         .file_stem()
         .ok_or("Geçersiz config yolu")?
@@ -95,9 +100,25 @@ fn resolve_interface(config_path: &str) -> Result<ConnInfo, String> {
 }
 
 fn command_exists(cmd: &str) -> bool {
-    Command::new("which")
-        .arg(cmd)
-        .output()
-        .map(|o| o.status.success())
+    std::env::var("PATH")
+        .unwrap_or_default()
+        .split(':')
+        .filter(|d| !d.is_empty())
+        .any(|dir| {
+            let path = Path::new(dir).join(cmd);
+            path.is_file() && is_executable(&path)
+        })
+}
+
+#[cfg(unix)]
+fn is_executable(path: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    path.metadata()
+        .map(|m| m.permissions().mode() & 0o111 != 0)
         .unwrap_or(false)
+}
+
+#[cfg(windows)]
+fn is_executable(path: &Path) -> bool {
+    path.exists()
 }

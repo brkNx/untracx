@@ -1,73 +1,74 @@
-import { useState } from 'react'
-import { vpnConnect, vpnDown } from '../lib/helper'
+import React, { useState } from 'react';
 
-interface ConnectionPanelProps {
-  helperRunning: boolean
-  setHelperRunning: (running: boolean) => void
+interface Props {
+  onConnect: (configPath: string) => Promise<void>;
+  onDisconnect: (iface: string) => Promise<void>;
+  loading: boolean;
 }
 
-export function ConnectionPanel({ helperRunning, setHelperRunning }: ConnectionPanelProps) {
-  const [configPath, setConfigPath] = useState('')
-  const [status, setStatus] = useState('')
-  const [loading, setLoading] = useState(false)
+export default function ConnectionPanel({ onConnect, onDisconnect, loading }: Props) {
+  const [configPath, setConfigPath] = useState('/etc/wireguard/wg0.conf');
+  const [iface, setIface] = useState('wg0');
+  const [status, setStatus] = useState<string | null>(null);
 
   const handleConnect = async () => {
-    setLoading(true)
+    setStatus('Bağlanıyor...');
     try {
-      const result = await vpnConnect(configPath)
-      setStatus(result)
-    } catch (e) {
-      setStatus(String(e))
-    } finally {
-      setLoading(false)
+      await onConnect(configPath);
+      setStatus('Bağlandı ✓');
+    } catch (e: any) {
+      setStatus(`Hata: ${e}`);
     }
-  }
+  };
 
   const handleDisconnect = async () => {
-    setLoading(true)
+    setStatus('Bağlantı kesiliyor...');
     try {
-      const result = await vpnDown(configPath)
-      setStatus(result)
-    } catch (e) {
-      setStatus(String(e))
-    } finally {
-      setLoading(false)
+      await onDisconnect(iface);
+      setStatus('Bağlantı kesildi ✓');
+    } catch (e: any) {
+      setStatus(`Hata: ${e}`);
     }
-  }
-
-  const handleHelperToggle = async () => {
-    if (helperRunning) {
-      await helperStop()
-      setHelperRunning(false)
-    } else {
-      await helperStart()
-      setHelperRunning(true)
-    }
-  }
+  };
 
   return (
-    <div style={{ marginTop: '16px' }}>
-      <h2>Connection</h2>
-      <button onClick={handleHelperToggle}>
-        {helperRunning ? 'Stop Helper' : 'Start Helper'}
-      </button>
-      <div style={{ marginTop: '8px' }}>
-        <input
-          placeholder="Config path (e.g. client.conf)"
-          value={configPath}
-          onChange={(e) => setConfigPath(e.target.value)}
-          style={{ width: '300px' }}
-        />
-        <button onClick={handleConnect} disabled={loading || !configPath}>
-          Connect
+    <div style={{ marginTop: '1rem' }}>
+      <h2>VPN Bağlantısı</h2>
+      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+        <button onClick={handleConnect} disabled={loading}>
+          Bağlan
         </button>
-        <button onClick={handleDisconnect} disabled={loading || !configPath}>
-          Disconnect
+        <button onClick={handleDisconnect} disabled={loading}>
+          Kes
         </button>
       </div>
       {status && (
-        <pre style={{ background: '#f5f5f5', padding: '8px', marginTop: '8px' }}>{status}</pre>
+        <pre style={{ padding: '0.5rem', background: '#f5f5f5', borderRadius: '4px', fontSize: '0.9em' }}>
+          {status}
+        </pre>
       )}
+      <div style={{ marginTop: '0.5rem' }}>
+        <label style={{ display: 'block', marginBottom: '0.25rem' }}>
+          Config yolu:
+          <input
+            type="text"
+            value={configPath}
+            onChange={(e) => setConfigPath(e.target.value)}
+            style={{ marginLeft: '0.5rem', width: '350px' }}
+          />
+        </label>
+      </div>
+      <div style={{ marginTop: '0.25rem' }}>
+        <label style={{ display: 'block', marginBottom: '0.25rem' }}>
+          Arayüz adı:
+          <input
+            type="text"
+            value={iface}
+            onChange={(e) => setIface(e.target.value)}
+            style={{ marginLeft: '0.5rem', width: '100px' }}
+          />
+        </label>
+      </div>
     </div>
-  )
+  );
 }

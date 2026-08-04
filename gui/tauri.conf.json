@@ -1,11 +1,13 @@
 {
-  "$schema": "https://schema.tauri.app/config/2",
+  "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/.schema/config.json",
   "productName": "untracx",
   "version": "0.1.0",
   "identifier": "com.untracx.app",
   "build": {
-    "frontendDist": "../gui/frontend/dist",
-    "devUrl": "http://localhost:5173"
+    "frontendDist": "../frontend/dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
   },
   "app": {
     "withGlobalTauri": true,
