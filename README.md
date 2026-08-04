@@ -159,6 +159,31 @@ npm run dev   # geliştirme sunucusu (http://localhost:5173)
 
 `gui/tauri.conf.json` ürün adını, versiyonunu ve pencere boyutlarını içerir. `gui/frontend/src/lib/helper.ts` Tauri API çağrılarını wrapper'lar.
 
+## Kill-switch ve DNS leak koruması
+
+Kill-switch, VPN tüneli kesildiğinde internet trafişinin VPN dışına sızmasını engeller. Aşama 2'de platforma özel kill-switch eklenecek:
+
+| Platform | Kill-switch yöntemi |
+|---|---|
+| Linux | nftables/iptables policy + `AllowedIPs` |
+| macOS | Network Extension kuralları |
+| Windows | Windows Filtering Platform |
+
+### DNS leak koruması
+
+Sunucu DNS'i yalnız VPN alt ağından kabul eder (`10.66.66.0/24`). Public 53 kapalıdır. İstemci tarafında `DNS = 10.66.66.1` ayarı tüm DNS sorgularını tünelden yönlendirir.
+
+Doğrulama:
+```bash
+# VPN bağlıyken
+dig @10.66.66.1 google.com
+# → VPN DNS'den çözümlemeli
+
+# VPN kesildikten sonra
+dig @10.66.66.1 google.com
+# → timeout olmalı (leak yok)
+```
+
 ## Geliştirici kontrolleri
 
 ```bash
