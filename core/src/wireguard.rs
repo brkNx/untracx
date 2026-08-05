@@ -14,8 +14,8 @@ pub fn connect(config_path: &str) -> Result<(), String> {
     let iface = &conn.interface;
 
     if command_exists("wg-quick") {
-        let out = Command::new("wg-quick")
-            .args(["up", iface])
+        let out = wg_cmd("wg-quick")
+            .args(["up", &conn.config_path])
             .output()
             .map_err(|e| e.to_string())?;
         if out.status.success() {
@@ -26,7 +26,7 @@ pub fn connect(config_path: &str) -> Result<(), String> {
     }
 
     if command_exists("wireguard-go") {
-        let out = Command::new("wireguard-go")
+        let out = wg_cmd("wireguard-go")
             .arg(&conn.config_path)
             .output()
             .map_err(|e| e.to_string())?;
@@ -51,8 +51,8 @@ pub fn down(config_path: &str) -> Result<(), String> {
     let iface = &conn.interface;
 
     if command_exists("wg-quick") {
-        let out = Command::new("wg-quick")
-            .args(["down", iface])
+        let out = wg_cmd("wg-quick")
+            .args(["down", &conn.config_path])
             .output()
             .map_err(|e| e.to_string())?;
         if out.status.success() {
@@ -68,7 +68,7 @@ pub fn status() -> Result<(), String> {
     if !command_exists("wg") {
         return Err("wg aracı bulunamadı (wireguard-tools kurun)".into());
     }
-    let out = Command::new("wg").output().map_err(|e| e.to_string())?;
+    let out = wg_cmd("wg").output().map_err(|e| e.to_string())?;
     let text = String::from_utf8_lossy(&out.stdout).to_string();
     if text.trim().is_empty() {
         println!("VPN bağlı değil.");
@@ -100,15 +100,21 @@ fn resolve_interface(config_path: &str) -> Result<ConnInfo, String> {
 }
 
 fn command_exists(cmd: &str) -> bool {
-    std::env::var("PATH")
-        .unwrap_or_default()
-        .split(':')
-        .filter(|d| !d.is_empty())
-        .any(|dir| {
-            let path = Path::new(dir).join(cmd);
-            path.is_file() && is_executable(&path)
-        })
+    PATH_EXTENSIONS.iter().any(|dir| {
+        let path = Path::new(dir).join(cmd);
+        path.is_file() && is_executable(&path)
+    })
 }
+
+fn wg_cmd(cmd: &str) -> Command {
+    let mut c = Command::new(cmd);
+    let path = std::env::var("PATH").unwrap_or_default();
+    let extended = format!("{}:{}", PATH_EXTENSIONS.join(":"), path);
+    c.env("PATH", extended);
+    c
+}
+
+const PATH_EXTENSIONS: [&str; 2] = ["/opt/homebrew/bin", "/usr/local/bin"];
 
 #[cfg(unix)]
 fn is_executable(path: &Path) -> bool {
