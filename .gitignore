@@ -5,6 +5,11 @@
 # OS
 .DS_Store
 
+# Logs / gizlilik
+*.log
+.env
+.env.*
+
 # Anahtarlar ve istemci config — asla repo'ya girmez
 *.conf
 *.key

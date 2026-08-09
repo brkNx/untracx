@@ -90,13 +90,48 @@ fn resolve_interface(config_path: &str) -> Result<ConnInfo, String> {
         .ok_or("Geçersiz config yolu")?
         .to_string_lossy()
         .to_string();
-    if stem.contains('/') || stem.contains(' ') || stem.is_empty() {
-        return Err("Config dosya adı geçersiz".into());
+    if !valid_interface_name(&stem) {
+        return Err(format!(
+            "Config dosya adı arayüz adı olarak geçersiz (15 karakter, [A-Za-z0-9_.=+-]): {stem}"
+        ));
     }
+    if !p.is_file() {
+        return Err(format!("Config dosyası bulunamadı: {config_path}"));
+    }
+    check_config_perms(p)?;
     Ok(ConnInfo {
         interface: stem,
         config_path: config_path.to_string(),
     })
+}
+
+fn valid_interface_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 15
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '=' | '+' | '.'))
+}
+
+/// Config içinde özel anahtar var; başkaları okuyamamalı (0600 gerekir).
+#[cfg(unix)]
+fn check_config_perms(p: &Path) -> Result<(), String> {
+    use std::os::unix::fs::MetadataExt;
+    let meta = p.metadata().map_err(|e| e.to_string())?;
+    if meta.mode() & 0o077 != 0 {
+        return Err(format!(
+            "{} başkaları tarafından okunabilir (izin: {:o}). chmod 600 {} yapın",
+            p.display(),
+            meta.mode() & 0o777,
+            p.display()
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn check_config_perms(_p: &Path) -> Result<(), String> {
+    Ok(())
 }
 
 fn command_exists(cmd: &str) -> bool {
