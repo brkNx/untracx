@@ -56,7 +56,7 @@ jobs:
           if codesign --sign "$CODESIGN_IDENTITY" --force "core/target/${{ matrix.target }}/release/untracx"; then
             echo "codesign basarili"
           else
-            echo "codesign basarisiz; imzasiizo devam"
+            echo "codesign basarisiz; imzasiz devam"
           fi
           cp "core/target/${{ matrix.target }}/release/untracx" "dist-artifacts/${{ matrix.artifact }}"
 
@@ -75,7 +75,7 @@ jobs:
             -t http://timestamp.digicert.com; then
             echo "osslsigncode basarili"
           else
-            echo "osslsigncode basarisiz; imzasiizo devam"
+            echo "osslsigncode basarisiz; imzasiz devam"
             cp "core/target/${{ matrix.target }}/release/untracx.exe" "dist-artifacts/${{ matrix.artifact }}"
           fi
 

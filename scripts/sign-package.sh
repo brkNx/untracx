@@ -32,7 +32,7 @@ sign_binary() {
     if [[ -n "${CODESIGN_IDENTITY:-}" ]]; then
       codesign --sign "${CODESIGN_IDENTITY}" --force "${binary}" || die "codesign basarisiz"
     else
-      log "CODESIGN_IDENTITY bos; imzasiiz kopyalaniyor"
+      log "CODESIGN_IDENTITY bos; imzasiz kopyalaniyor"
     fi
     cp "${binary}" "${output}"
   else
@@ -80,6 +80,10 @@ main() {
 
   log "Tum imzali paketler ${DIST_DIR}/ klasorunde:"
   ls -la "${DIST_DIR}/"
+
+  log "SHA-256 saglamalar yaziliyor: ${DIST_DIR}/checksums.txt"
+  (cd "${DIST_DIR}" && find . -maxdepth 1 -type f ! -name 'checksums.txt' -exec sha256sum {} \; > checksums.txt)
+  cat "${DIST_DIR}/checksums.txt"
 }
 
 main "$@"
