@@ -12,6 +12,7 @@ WG_DNS="${WG_DNS:-10.66.66.1}"
 WG_IFACE="${WG_IFACE:-wg0}"
 PUBLIC_ENDPOINT="${PUBLIC_ENDPOINT:-}"
 SSH_PORT="${SSH_PORT:-}"
+WG_MTU="${WG_MTU:-1420}"
 
 WG_DIR="/etc/wireguard"
 WG_CONF="${WG_DIR}/${WG_IFACE}.conf"
@@ -68,6 +69,7 @@ fi
 
 [[ "$WG_IFACE" =~ ^[A-Za-z0-9_=+.-]{1,15}$ ]] || die "gecersiz WG_IFACE: $WG_IFACE"
 validate_port "$WG_PORT" || die "gecersiz WG_PORT: $WG_PORT"
+[[ "$WG_MTU" =~ ^[0-9]+$ ]] && (( 576 <= 10#$WG_MTU && 10#$WG_MTU <= 1500 )) || die "gecersiz WG_MTU (576-1500): $WG_MTU"
 
 if [[ -z "$SSH_PORT" && -n "${SSH_CONNECTION:-}" ]]; then
   read -r _ _ _ SSH_PORT <<< "$SSH_CONNECTION"
@@ -132,6 +134,7 @@ if [[ ! -e "$WG_CONF" ]]; then
 [Interface]
 Address = ${WG_SERVER_IP}/24
 ListenPort = ${WG_PORT}
+MTU = ${WG_MTU}
 PrivateKey = $(<"$SERVER_PRIV")
 
 # Rules are limited to the VPN subnet and the detected OCI egress interface.
@@ -160,6 +163,7 @@ WG_SUBNET=${WG_SUBNET}
 WG_SERVER_IP=${WG_SERVER_IP}
 WG_DNS=${WG_DNS}
 WG_PORT=${WG_PORT}
+WG_MTU=${WG_MTU}
 PUBLIC_ENDPOINT=${PUBLIC_ENDPOINT}
 EOF
 chmod 0600 "$SERVER_ENV"

@@ -82,12 +82,13 @@ cleanup() {
 }
 trap cleanup EXIT
 
+WG_MTU="${WG_MTU:-1420}"
 cat > "$TMP_CLIENT" <<EOF
 [Interface]
 PrivateKey = ${CLIENT_PRIV}
 Address = ${CLIENT_IP}/32
 DNS = ${WG_DNS}
-MTU = 1420
+MTU = ${WG_MTU}
 
 [Peer]
 PublicKey = ${SERVER_PUB}
