@@ -1,20 +1,21 @@
 #!/usr/bin/env bash
 # untracx - gercek cihaz baglanti testi (istemci tarafinda calistirilir)
 # Kullanim: bash scripts/test-connection.sh [peer-adi]
-# Varsayilanlar: UNTRACX_SERVER=158.180.50.114, UNTRACX_SSH_USER=ubuntu
+# Varsayilanlar: UNTRACX_SERVER=158.180.50.114, UNTRACX_SSH_USER=ubuntu, UNTRACX_IFACE=wg0
 # Gereksinimler: ssh/scp, sudo (sunucuda ve yerelde), WireGuard.app veya wireguard-tools
 set -Eeuo pipefail
 
 SERVER="${UNTRACX_SERVER:-158.180.50.114}"
 SSH_USER="${UNTRACX_SSH_USER:-ubuntu}"
 PEER_NAME="${1:-macbook}"
+IFACE="${UNTRACX_IFACE:-wg0}"
 CONF_FILE="untracx-${PEER_NAME}.conf"
 LOCAL_CONF="/tmp/${CONF_FILE}"
 
 log() { printf '\n[untracx-test] %s\n' "$*"; }
 die() { printf '\n[untracx-test] HATA: %s\n' "$*" >&2; exit 1; }
 
-log "Sunucu: ${SERVER} | Peer: ${PEER_NAME}"
+log "Sunucu: ${SERVER} | Peer: ${PEER_NAME} | Arayuz: ${IFACE}"
 
 # 1) Sunucuda peer olustur (sudo sifresini terminale yazin)
 log "Peer olusturuluyor (sunucu ve sudo sifresi istenebilir)"
@@ -75,10 +76,10 @@ else
 fi
 
 # 6) HANDSHAKE testi (sunucu tarafinda)
-log "3/3 HANDSHAKE testi (sunucu)"
+log "3/3 HANDSHAKE testi (sunucu, ${IFACE})"
 PRIV="$(sed -n 's/^PrivateKey = //p' "$LOCAL_CONF" | head -1)"
 CLIENT_PUB="$(printf '%s\n' "$PRIV" | wg pubkey)"
-HANDSHAKE="$(ssh -t "$SSH_USER@$SERVER" "sudo wg show wg0" | tr -d '\r' | grep -A4 "peer: ${CLIENT_PUB}")"
+HANDSHAKE="$(ssh -t "$SSH_USER@$SERVER" "sudo wg show ${IFACE}" | tr -d '\r' | grep -A4 "peer: ${CLIENT_PUB}")"
 if grep -q 'seconds ago' <<< "$HANDSHAKE"; then
   echo "PASS: aktif handshake gorunuyor"
   echo "$HANDSHAKE" | grep -E 'peer:|endpoint:|allowed ips:|latest handshake:|transfer:'
