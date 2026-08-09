@@ -69,7 +69,9 @@ fi
 
 [[ "$WG_IFACE" =~ ^[A-Za-z0-9_=+.-]{1,15}$ ]] || die "gecersiz WG_IFACE: $WG_IFACE"
 validate_port "$WG_PORT" || die "gecersiz WG_PORT: $WG_PORT"
-[[ "$WG_MTU" =~ ^[0-9]+$ ]] && (( 576 <= 10#$WG_MTU && 10#$WG_MTU <= 1500 )) || die "gecersiz WG_MTU (576-1500): $WG_MTU"
+if ! [[ "$WG_MTU" =~ ^[0-9]+$ ]] || ! (( 576 <= 10#$WG_MTU && 10#$WG_MTU <= 1500 )); then
+  die "gecersiz WG_MTU (576-1500): $WG_MTU"
+fi
 
 if [[ -z "$SSH_PORT" && -n "${SSH_CONNECTION:-}" ]]; then
   read -r _ _ _ SSH_PORT <<< "$SSH_CONNECTION"
