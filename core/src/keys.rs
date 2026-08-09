@@ -38,3 +38,59 @@ pub fn validate_public(public_b64: &str) -> Result<(), String> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const ZERO_KEY: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+    const SHORT_KEY: &str = "AAAA"; // 3 bayt -> 4 karakter
+    const NOT_B64: &str = "!!!not-base64!!!";
+
+    #[test]
+    fn generated_keys_are_valid_and_distinct() {
+        let a = generate();
+        let b = generate();
+        assert_ne!(a.private, b.private);
+        assert_ne!(a.public, b.public);
+        assert!(validate_private(&a.private).is_ok());
+        assert!(validate_public(&a.public).is_ok());
+    }
+
+    #[test]
+    fn public_from_private_matches_generate() {
+        let kp = generate();
+        let derived = public_from_private(&kp.private).unwrap();
+        assert_eq!(derived, kp.public);
+    }
+
+    #[test]
+    fn public_from_private_is_deterministic() {
+        let a = public_from_private(ZERO_KEY).unwrap();
+        let b = public_from_private(ZERO_KEY).unwrap();
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn validates_public_key() {
+        assert!(validate_public(&generate().public).is_ok());
+        assert!(validate_public(ZERO_KEY).is_ok());
+        assert!(validate_public(SHORT_KEY).is_err());
+        assert!(validate_public(NOT_B64).is_err());
+    }
+
+    #[test]
+    fn rejects_invalid_private_keys() {
+        assert!(validate_private(SHORT_KEY).is_err());
+        assert!(validate_private(NOT_B64).is_err());
+        assert!(public_from_private(SHORT_KEY).is_err());
+        assert!(public_from_private("").is_err());
+    }
+
+    #[test]
+    fn trims_whitespace() {
+        let kp = generate();
+        let derived = public_from_private(&format!("  {}\n", kp.private)).unwrap();
+        assert_eq!(derived, kp.public);
+    }
+}
