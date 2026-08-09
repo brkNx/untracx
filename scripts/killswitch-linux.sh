@@ -23,8 +23,9 @@ detect_out_iface() {
 
 ac() {
   detect_out_iface
-  log "Kill-switch aciliyor (nftables)..."
+  log "Kill-switch aciliyor (nftables, IPv4 + IPv6)..."
 
+  # IPv4: tünelden gelen harici trafik disinda FORWARD kapali.
   nft add table ip untracx 2>/dev/null || true
   nft add chain ip untracx forward '{ type filter hook forward priority 0; policy drop; }' 2>/dev/null || true
   nft add chain ip untracx output '{ type filter hook output priority 0; policy accept; }' 2>/dev/null || true
@@ -36,19 +37,35 @@ ac() {
   nft add rule ip untracx forward iifname "$WG_IFACE" oifname "$WG_IFACE" accept
   nft add rule ip untracx forward iifname lo oifname lo accept
 
-  log "Kill-switch aktif: WG_IFACE=$WG_IFACE OUT_IFACE=$OUT_IFACE"
+  # IPv6: istemci AllowedIPs icinde ::/0 var; sizintiyi onlemek icin ayni
+  # mantik ip6 family'sinda da kurulur (subnet IPv4 oldugu icin yalniz arayuz bazli).
+  nft add table ip6 untracx 2>/dev/null || true
+  nft add chain ip6 untracx forward '{ type filter hook forward priority 0; policy drop; }' 2>/dev/null || true
+  nft add chain ip6 untracx output '{ type filter hook output priority 0; policy accept; }' 2>/dev/null || true
+
+  nft add rule ip6 untracx forward iifname "$WG_IFACE" oifname "$OUT_IFACE" accept
+  nft add rule ip6 untracx forward iifname "$OUT_IFACE" oifname "$WG_IFACE" ct state established,related accept
+  nft add rule ip6 untracx output oifname "$WG_IFACE" accept
+
+  nft add rule ip6 untracx forward iifname "$WG_IFACE" oifname "$WG_IFACE" accept
+  nft add rule ip6 untracx forward iifname lo oifname lo accept
+
+  log "Kill-switch aktif (v4+v6): WG_IFACE=$WG_IFACE OUT_IFACE=$OUT_IFACE"
 }
 
 kapat() {
   log "Kill-switch kapatiliyor (nftables)..."
   nft delete table ip untracx 2>/dev/null || true
+  nft delete table ip6 untracx 2>/dev/null || true
   log "Kill-switch kaldirildi; tum trafic normal yoldan gidecek."
 }
 
 durum() {
-  if nft list table ip untracx > /dev/null 2>&1; then
+  if nft list table ip untracx > /dev/null 2>&1 || nft list table ip6 untracx > /dev/null 2>&1; then
     echo "Kill-switch ACIK:"
-    nft list table ip untracx
+    nft list table ip untracx 2>/dev/null
+    echo "---"
+    nft list table ip6 untracx 2>/dev/null
   else
     echo "Kill-switch KAPALI"
   fi
