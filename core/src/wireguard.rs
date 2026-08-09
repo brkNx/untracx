@@ -1,6 +1,7 @@
 use std::path::Path;
 use std::process::Command;
 
+#[derive(Debug)]
 pub struct ConnInfo {
     pub interface: String,
     pub config_path: String,
@@ -108,6 +109,8 @@ fn resolve_interface(config_path: &str) -> Result<ConnInfo, String> {
 fn valid_interface_name(name: &str) -> bool {
     !name.is_empty()
         && name.len() <= 15
+        && name != "."
+        && !name.contains("..")
         && name
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '=' | '+' | '.'))
@@ -132,6 +135,79 @@ fn check_config_perms(p: &Path) -> Result<(), String> {
 #[cfg(not(unix))]
 fn check_config_perms(_p: &Path) -> Result<(), String> {
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write as _;
+
+    #[test]
+    fn interface_name_whitelist() {
+        for ok in [
+            "wg0",
+            "client",
+            "macbook-air",
+            "tun_1",
+            "if1+",
+            "a=b",
+            "x.y",
+        ] {
+            assert!(valid_interface_name(ok), "geçerli olmalı: {ok}");
+        }
+        for bad in [
+            "",
+            "a b",
+            "a/b",
+            "a..b",
+            "a;b",
+            "a$b",
+            "a`b",
+            "a\nb",
+            "abcdefghijklmnopq", // 17 karakter
+        ] {
+            assert!(!valid_interface_name(bad), "geçersiz olmalı: {bad:?}");
+        }
+    }
+
+    #[test]
+    fn resolve_rejects_parent_dir_traversal() {
+        let err = resolve_interface("/tmp/../etc/passwd").unwrap_err();
+        assert!(err.contains("'..'"), "err: {err}");
+    }
+
+    #[test]
+    fn resolve_rejects_loose_stem() {
+        // "a/b.conf" dosya adı yok ama kök /tmp var; stem denetimi önce çalışır.
+        let err = resolve_interface("/tmp/a;b.conf").unwrap_err();
+        assert!(err.contains("geçersiz"), "err: {err}");
+    }
+
+    #[test]
+    fn resolve_rejects_missing_file() {
+        let err = resolve_interface("/tmp/kesinlikle-yok.conf").unwrap_err();
+        assert!(err.contains("bulunamadı"), "err: {err}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn perms_check_rejects_world_readable() {
+        let dir = std::env::temp_dir().join(format!("untracx-perms-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("loose.conf");
+        {
+            let mut f = std::fs::File::create(&path).unwrap();
+            f.write_all(b"dummy").unwrap();
+        }
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+        assert!(check_config_perms(&path).is_err());
+
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+        assert!(check_config_perms(&path).is_ok());
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 }
 
 fn command_exists(cmd: &str) -> bool {
