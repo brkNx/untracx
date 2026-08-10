@@ -24,6 +24,7 @@
 gui/frontend/dist/
 gui/frontend/node_modules/
 gui/gen/
+gui/frontend/coverage/
 
 # Paket çıktısı (scripts/sign-package.sh)
 dist/

@@ -42,8 +42,11 @@ if [[ -d "$ROOT_DIR/gui" ]]; then
   cargo clippy --manifest-path "$ROOT_DIR/gui/Cargo.toml" --locked -- -D warnings
   if [[ -d "$ROOT_DIR/gui/frontend/node_modules" ]]; then
     (cd "$ROOT_DIR/gui/frontend" && npm run build > /dev/null)
+    (cd "$ROOT_DIR/gui/frontend" && npm run test)
+    (cd "$ROOT_DIR/gui/frontend" && npm run lint)
+    (cd "$ROOT_DIR/gui/frontend" && npm run format:check)
   else
-    printf 'NOT: gui/frontend/node_modules yok; frontend build atlandi. once: cd gui/frontend && npm install\n' >&2
+    printf 'NOT: gui/frontend/node_modules yok; frontend build/lint/test atlandi. once: cd gui/frontend && npm install\n' >&2
   fi
 fi
 

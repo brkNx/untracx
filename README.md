@@ -2,7 +2,7 @@
 
 Kişisel kullanım için WireGuard tabanlı VPN projesi. Hedef; önce güvenli ve tekrar üretilebilir bir sunucu kurulumu, ardından Rust/Tauri tabanlı masaüstü istemcisidir.
 
-> Durum: Aşama 1 tamamlandı. Sunucu Oracle Cloud Always Free (Ubuntu 24.04 x86_64) üzerinde kurulu ve çalışıyor; peer yönetimi, Rust CLI güvenlik sertleştirmesi, ayrıcalıklı helper protokolü, Tauri 2 + React GUI ve platforma özel kill-switch scriptleri hazır. Sıradaki adım gerçek cihazla handshake/egress testi ve GUI geliştirmesinin tamamlanması.
+> Durum: Aşama 1 ve Aşama 2 tamamlandı. Sunucu Oracle Cloud Always Free (Ubuntu 24.04 x86_64) üzerinde kurulu ve çalışıyor; peer yönetimi, Rust CLI güvenlik sertleştirmesi, ayrıcalıklı helper protokolü, Tauri 2 + React GUI (tam fonksiyonel — anahtar üretimi, config oluşturma, peer yönetimi, ayarlar) ve platforma özel kill-switch scriptleri hazır. Sıradaki adım gerçek cihazla handshake/egress testi.
 
 ## Canlı sunucu
 
@@ -134,7 +134,16 @@ curl -4 https://api.ipify.org
 
 ## GUI (Tauri 2 + React)
 
-`gui/` dizinde Tauri 2 + React scaffold hazır.
+`gui/` dizinde tam fonksiyonel Tauri 2 + React GUI mevcut. Dark tema, tab navigasyonu, tip güvenli API çağrıları ve test coverage ile.
+
+### Özellikler
+
+- **Durum** — WireGuard durumu, otomatik yenileme (10 sn)
+- **Bağlantı** — Config yolu seçimi, arayüz adı, bağlan/kes
+- **Yönetim** — Peer listesi, ekleme/kaldırma (onaylı), tablo görünümü
+- **Anahtarlar** — X25519 anahtar üretimi, public key türetme, validasyon
+- **Config Üretici** — WireGuard config oluşturma, dosyaya kaydetme (0600 izinli)
+- **Ayarlar** — Varsayılan config yolu, arayüz adı, sunucu bilgileri (kalıcı)
 
 ### Kurulum
 
@@ -142,6 +151,15 @@ curl -4 https://api.ipify.org
 cd gui/frontend
 npm install
 npm run dev   # geliştirme sunucusu (http://localhost:5173)
+```
+
+Veya Makefile üzerinden:
+
+```bash
+make dev-gui    # geliştirme modu
+make build-gui  # production derleme
+make test-gui   # frontend testleri
+make lint-gui   # ESLint + Prettier kontrolü
 ```
 
 ### Tauri komutları
@@ -154,10 +172,23 @@ npm run dev   # geliştirme sunucusu (http://localhost:5173)
 | `vpn_connect` | Config dosyasıyla VPN bağlantısı |
 | `vpn_down` | Arayüz adıyla VPN bağlantısını kes |
 | `vpn_status` | WireGuard durumunu sorgula |
+| `peer_list` | Aktif peer'leri listele |
+| `peer_add` | Yeni peer ekle |
+| `peer_remove` | Peer'ı kaldır |
+| `keygen` | Yeni X25519 anahtar çifti üret |
+| `public_from_private` | Özel anahtardan genel anahtar türet |
+| `validate_private_key` | Özel anahtarı doğrula |
+| `validate_public_key` | Genel anahtarı doğrula |
+| `generate_config` | WireGuard config üret |
+| `save_config` | Config'ı dosyaya kaydet (0600 izinli) |
 
 ### Yapılandırma
 
-`gui/tauri.conf.json` ürün adını, versiyonunu ve pencere boyutlarını içerir. `gui/frontend/src/lib/helper.ts` Tauri API çağrılarını wrapper'lar.
+- `gui/tauri.conf.json` — ürün adı, versiyon, pencere boyutları, CSP
+- `gui/capabilities/default.json` — Tauri 2 capabilities (core, dialog, store izinleri)
+- `gui/frontend/src/lib/types.ts` — tüm API tipleri
+- `gui/frontend/src/lib/helper.ts` — tip güvenli Tauri invoke wrapper'ları
+- `gui/frontend/src/styles.css` — dark tema, BEM isimlendirme
 
 ## Kill-switch ve DNS leak koruması
 
@@ -204,13 +235,22 @@ Resolve-DnsName myip.opendns.com -Server 208.67.222.222
 
 Sonuç VPN sunucunun IP'sini göstermeli, ISP DNS sunucusunu göstermemelidir. VPN kesildikten sonra `dig @10.66.66.1 google.com` timeout olmalı (leak yok).
 
-## Geliştirici kontrolleri
+## Geliştirici komutları
 
 ```bash
+# Tüm kontroller (shell, Rust, frontend)
 ./scripts/check.sh
+
+# Makefile üzerinden
+make check       # tüm kalite kontrolleri
+make test        # Rust + frontend testleri
+make lint        # ESLint + Prettier
+make build       # CLI + GUI derleme
+make clean       # build temizliği
+make release     # cross-platform imzalı paket
 ```
 
-Bu komut; shell scriptlerini (syntax + shellcheck), core ve GUI Rust kodunu (fmt, test, clippy) ve frontend'i (tsc + vite build) denetler.
+Bu komutlar; shell scriptlerini (syntax + shellcheck), core ve GUI Rust kodunu (fmt, test, clippy) ve frontend'i (tsc + vite build + vitest + eslint + prettier) denetler.
 
 ## Yol haritası
 
@@ -220,11 +260,17 @@ Bu komut; shell scriptlerini (syntax + shellcheck), core ve GUI Rust kodunu (fmt
 - [x] Peer ekleme ve iptal etme
 - [x] Rust CLI güvenlik sertleştirmesi (stdin okuma, private key gizleme, path traversal koruması, libc FFI)
 - [x] Ayrıcalıklı helper protokolü (Unix socket + systemd servisi)
-- [x] Tauri 2 + React GUI scaffold (gui/)
-- [x] Kill-switch scriptleri (Linux nftables, macOS ApplicationFirewall, Windows WFP)
+- [x] Tauri 2 + React GUI (tam fonksiyonel — 16 Tauri komutu, 5 sekme, dark tema)
+- [x] Kill-switch scriptleri (Linux nftables + IPv6, macOS ApplicationFirewall, Windows WFP)
 - [x] Paket imzalama ve release workflow (scripts/sign-package.sh, .github/workflows/release.yml)
+- [x] CI kalite kapısı (fmt, test, clippy, shellcheck, frontend build)
+- [x] Dependabot (cargo/npm/GitHub-actions)
+- [x] Unit testler (Rust: 15 test, Frontend: 20 test)
+- [x] Frontend linting (ESLint + Prettier)
+- [x] Makefile (build, test, lint, check, clean, release)
 - [ ] Gerçek cihazla WireGuard handshake ve IPv4/DNS egress testi (scripts/test-connection.sh hazır)
-- [ ] GUI geliştirmesinin tamamlanması (bağlantı paneli, durum gösterimi, peer yönetimi)
+- [ ] System tray entegrasyonu
+- [ ] Klavye kısayolları
 
 ## Lisans
 

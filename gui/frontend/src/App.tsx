@@ -1,154 +1,93 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import {
-  helperStart,
-  helperStop,
-  helperStatus,
-  vpnConnect,
-  vpnDisconnect,
-  vpnStatus,
-} from './lib/helper';
-import ConnectionPanel from './components/ConnectionPanel';
+import { useState, useEffect, useCallback } from 'react';
+import { helperStatus, vpnStatus } from './lib/helper';
+import ErrorBoundary from './components/ErrorBoundary';
+import StatusIndicator from './components/ui/StatusIndicator';
 import StatusPanel from './components/StatusPanel';
+import ConnectionPanel from './components/ConnectionPanel';
 import PeerManager from './components/PeerManager';
+import KeygenPanel from './components/KeygenPanel';
+import ConfigGenPanel from './components/ConfigGenPanel';
+import SettingsPanel from './components/SettingsPanel';
 
-function App() {
+type Tab = 'status' | 'connection' | 'management' | 'keys' | 'settings';
+
+const TABS: { key: Tab; label: string }[] = [
+  { key: 'status', label: 'Durum' },
+  { key: 'connection', label: 'Bağlantı' },
+  { key: 'management', label: 'Yönetim' },
+  { key: 'keys', label: 'Anahtarlar' },
+  { key: 'settings', label: 'Ayarlar' },
+];
+
+export default function App() {
+  const [activeTab, setActiveTab] = useState<Tab>('status');
   const [helperRunning, setHelperRunning] = useState<boolean | null>(null);
-  const [helperSocket, setHelperSocket] = useState<string>('');
   const [vpnConnected, setVpnConnected] = useState<boolean | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
 
-  const refreshHelperStatus = useCallback(async () => {
+  const refreshHelper = useCallback(async () => {
     try {
       const result = await helperStatus();
-      setHelperRunning(result?.running ?? false);
-      setHelperSocket(result?.socketPath ?? '');
-    } catch (e: any) {
+      setHelperRunning(result.running);
+    } catch {
       setHelperRunning(false);
     }
   }, []);
 
-  const refreshVpnStatus = useCallback(async () => {
+  const refreshVpn = useCallback(async () => {
     try {
       const result = await vpnStatus();
-      setVpnConnected(result?.connected ?? false);
+      setVpnConnected(result.connected);
     } catch {
       setVpnConnected(null);
     }
   }, []);
 
   useEffect(() => {
-    refreshHelperStatus();
-    refreshVpnStatus();
-  }, [refreshHelperStatus, refreshVpnStatus]);
+    refreshHelper();
+    refreshVpn();
+  }, [refreshHelper, refreshVpn]);
 
-  const handleStartHelper = async () => {
-    setLoading(true);
-    setMessage(null);
-    try {
-      await helperStart();
-      setMessage('Helper servisi başlatıldı.');
-      setTimeout(refreshHelperStatus, 1000);
-    } catch (e: any) {
-      setMessage(`Hata: ${e}`);
-    }
-    setLoading(false);
-  };
-
-  const handleStopHelper = async () => {
-    setLoading(true);
-    setMessage(null);
-    try {
-      await helperStop();
-      setMessage('Helper servisi durduruldu.');
-      setTimeout(refreshHelperStatus, 1000);
-    } catch (e: any) {
-      setMessage(`Hata: ${e}`);
-    }
-    setLoading(false);
-  };
-
-  const handleConnect = async (configPath: string) => {
-    setLoading(true);
-    setMessage(null);
-    try {
-      const result = await vpnConnect(configPath);
-      setMessage(`Bağlandı: ${JSON.stringify(result)}`);
-      setTimeout(refreshVpnStatus, 2000);
-    } catch (e: any) {
-      setMessage(`Hata: ${e}`);
-    }
-    setLoading(false);
-  };
-
-  const handleDisconnect = async (iface: string) => {
-    setLoading(true);
-    setMessage(null);
-    try {
-      const result = await vpnDisconnect(iface);
-      setMessage(`Bağlantı kesildi: ${JSON.stringify(result)}`);
-      setTimeout(refreshVpnStatus, 1000);
-    } catch (e: any) {
-      setMessage(`Hata: ${e}`);
-    }
-    setLoading(false);
-  };
+  const refreshAll = useCallback(() => {
+    refreshHelper();
+    refreshVpn();
+  }, [refreshHelper, refreshVpn]);
 
   return (
-    <div style={{ padding: '1rem', fontFamily: 'system-ui, sans-serif', maxWidth: '800px', margin: '0 auto' }}>
-      <h1>untracx</h1>
-      <p>
-        Helper:{' '}
-        <strong>
-          {helperRunning === null
-            ? 'Yükleniyor...'
-            : helperRunning
-              ? 'Çalışıyor'
-              : 'Durduruldu'}
-        </strong>
-        {helperSocket && <span style={{ marginLeft: '0.5rem', fontSize: '0.85em', color: '#666' }}>({helperSocket})</span>}
-      </p>
-      <p>
-        VPN:{' '}
-        <strong>
-          {vpnConnected === null
-            ? 'Belirsiz'
-            : vpnConnected
-              ? 'Bağlı'
-              : 'Bağlı değil'}
-        </strong>
-      </p>
+    <ErrorBoundary>
+      <div className="app">
+        <header className="app__header">
+          <h1>untracx</h1>
+          <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+            <StatusIndicator label="Helper" connected={helperRunning} />
+            <StatusIndicator label="VPN" connected={vpnConnected} />
+          </div>
+        </header>
 
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-        <button onClick={handleStartHelper} disabled={loading || helperRunning === true}>
-          Helper Başlat
-        </button>
-        <button onClick={handleStopHelper} disabled={loading || helperRunning !== true}>
-          Helper Durdur
-        </button>
-        <button onClick={refreshHelperStatus} disabled={loading}>
-          Yenile
-        </button>
+        <nav className="app__nav">
+          {TABS.map((tab) => (
+            <button
+              key={tab.key}
+              className={activeTab === tab.key ? 'app__nav button--active' : ''}
+              onClick={() => setActiveTab(tab.key)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+
+        <main className="app__main">
+          {activeTab === 'status' && <StatusPanel />}
+          {activeTab === 'connection' && <ConnectionPanel onStatusChange={refreshAll} />}
+          {activeTab === 'management' && <PeerManager />}
+          {activeTab === 'keys' && (
+            <div>
+              <KeygenPanel />
+              <ConfigGenPanel />
+            </div>
+          )}
+          {activeTab === 'settings' && <SettingsPanel />}
+        </main>
       </div>
-
-      {message && (
-        <div
-          style={{
-            padding: '0.5rem',
-            marginBottom: '1rem',
-            background: message.startsWith('Hata') ? '#fee' : '#efe',
-            borderRadius: '4px',
-          }}
-        >
-          {message}
-        </div>
-      )}
-
-      <StatusPanel onRefresh={refreshVpnStatus} />
-      <ConnectionPanel onConnect={handleConnect} onDisconnect={handleDisconnect} loading={loading} />
-      <PeerManager />
-    </div>
+    </ErrorBoundary>
   );
 }
-
-export default App;

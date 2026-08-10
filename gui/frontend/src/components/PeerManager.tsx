@@ -1,102 +1,137 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { peerList, peerAdd, peerRemove } from '../lib/helper';
+import type { Peer } from '../lib/types';
+import Spinner from './ui/Spinner';
+import Message from './ui/Message';
 
 export default function PeerManager() {
-  const [peers, setPeers] = useState<Array<{ publicKey: string }>>([]);
-  const [newPeerName, setNewPeerName] = useState('');
+  const [peers, setPeers] = useState<Peer[]>([]);
+  const [newName, setNewName] = useState('');
   const [removeName, setRemoveName] = useState('');
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     try {
       const result = await peerList();
-      setPeers(result?.peers ?? []);
-    } catch (e: any) {
-      setMessage(`Hata: ${e}`);
+      setPeers(result.peers ?? []);
+    } catch {
+      setPeers([]);
     }
-  };
+  }, []);
 
   useEffect(() => {
     refresh();
-  }, []);
+  }, [refresh]);
 
   const handleAdd = async () => {
-    if (!newPeerName.trim()) return;
+    if (!newName.trim()) return;
     setLoading(true);
     setMessage(null);
     try {
-      await peerAdd(newPeerName.trim());
-      setMessage(`Peer "${newPeerName}" eklendi ✓`);
-      setNewPeerName('');
+      await peerAdd(newName.trim());
+      setMessage({ type: 'success', text: `"${newName.trim()}" eklendi.` });
+      setNewName('');
       setTimeout(refresh, 1000);
-    } catch (e: any) {
-      setMessage(`Hata: ${e}`);
+    } catch (e) {
+      setMessage({ type: 'error', text: `Ekleme hatası: ${e}` });
     }
     setLoading(false);
   };
 
   const handleRemove = async () => {
     if (!removeName.trim()) return;
+    if (!window.confirm(`"${removeName.trim()}" peer'ı kaldırılacak. Emin misin?`)) return;
     setLoading(true);
     setMessage(null);
     try {
       await peerRemove(removeName.trim());
-      setMessage(`Peer "${removeName}" kaldırıldı ✓`);
+      setMessage({ type: 'success', text: `"${removeName.trim()}" kaldırıldı.` });
       setRemoveName('');
       setTimeout(refresh, 1000);
-    } catch (e: any) {
-      setMessage(`Hata: ${e}`);
+    } catch (e) {
+      setMessage({ type: 'error', text: `Kaldırma hatası: ${e}` });
     }
     setLoading(false);
   };
 
   return (
-    <div style={{ marginTop: '1rem' }}>
-      <h2>Peer Yönetimi</h2>
-      <button onClick={refresh} disabled={loading}>
-        Yenile
-      </button>
-      <div style={{ marginTop: '0.5rem' }}>
-        <strong>Aktif peer'ler ({peers.length}):</strong>
-        {peers.length === 0 && <p>Peer yok</p>}
-        <ul style={{ fontSize: '0.85em', wordBreak: 'break-all' }}>
-          {peers.map((p, i) => (
-            <li key={i}>{p.publicKey}</li>
-          ))}
-        </ul>
-      </div>
-      <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-        <div>
-          <input
-            type="text"
-            placeholder="Peer adı (eklemek için)"
-            value={newPeerName}
-            onChange={(e) => setNewPeerName(e.target.value)}
-            style={{ width: '200px' }}
-          />
-          <button onClick={handleAdd} disabled={loading}>
-            Ekle
-          </button>
-        </div>
-        <div>
-          <input
-            type="text"
-            placeholder="Peer adı (kaldırmak için)"
-            value={removeName}
-            onChange={(e) => setRemoveName(e.target.value)}
-            style={{ width: '200px' }}
-          />
-          <button onClick={handleRemove} disabled={loading}>
-            Kaldır
+    <div className="card">
+      <div className="card__header">
+        <span className="card__title">Peer Yönetimi ({peers.length})</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {loading && <Spinner />}
+          <button className="btn btn--secondary btn--sm" onClick={refresh} disabled={loading}>
+            Yenile
           </button>
         </div>
       </div>
-      {message && (
-        <pre style={{ marginTop: '0.5rem', padding: '0.5rem', background: '#f5f5f5', borderRadius: '4px', fontSize: '0.85em' }}>
-          {message}
-        </pre>
+
+      {message && <Message type={message.type} text={message.text} />}
+
+      {peers.length === 0 ? (
+        <div className="empty">Aktif peer yok.</div>
+      ) : (
+        <table className="table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Genel Anahtar</th>
+            </tr>
+          </thead>
+          <tbody>
+            {peers.map((p, i) => (
+              <tr key={p.publicKey}>
+                <td style={{ color: 'var(--text-muted)' }}>{i + 1}</td>
+                <td className="key">{p.publicKey}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       )}
+
+      <div className="grid-2" style={{ marginTop: 16 }}>
+        <div className="input-group">
+          <label>Peer ekle</label>
+          <div className="input-row">
+            <input
+              className="input"
+              type="text"
+              placeholder="cihaz-adı"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+            />
+            <button
+              className="btn btn--primary btn--sm"
+              onClick={handleAdd}
+              disabled={loading || !newName.trim()}
+            >
+              Ekle
+            </button>
+          </div>
+        </div>
+        <div className="input-group">
+          <label>Peer kaldır</label>
+          <div className="input-row">
+            <input
+              className="input"
+              type="text"
+              placeholder="cihaz-adı"
+              value={removeName}
+              onChange={(e) => setRemoveName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleRemove()}
+            />
+            <button
+              className="btn btn--danger btn--sm"
+              onClick={handleRemove}
+              disabled={loading || !removeName.trim()}
+            >
+              Kaldır
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

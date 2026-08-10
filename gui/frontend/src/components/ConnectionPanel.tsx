@@ -1,73 +1,92 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
+import { vpnConnect, vpnDisconnect } from '../lib/helper';
+import Spinner from './ui/Spinner';
+import Message from './ui/Message';
 
 interface Props {
-  onConnect: (configPath: string) => Promise<void>;
-  onDisconnect: (iface: string) => Promise<void>;
-  loading: boolean;
+  onStatusChange: () => void;
 }
 
-export default function ConnectionPanel({ onConnect, onDisconnect, loading }: Props) {
+export default function ConnectionPanel({ onStatusChange }: Props) {
   const [configPath, setConfigPath] = useState('/etc/wireguard/wg0.conf');
   const [iface, setIface] = useState('wg0');
-  const [status, setStatus] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const handleConnect = async () => {
-    setStatus('Bağlanıyor...');
+    setLoading(true);
+    setMessage(null);
     try {
-      await onConnect(configPath);
-      setStatus('Bağlandı ✓');
-    } catch (e: any) {
-      setStatus(`Hata: ${e}`);
+      await vpnConnect(configPath);
+      setMessage({ type: 'success', text: 'VPN bağlantısı kuruldu.' });
+      setTimeout(onStatusChange, 1500);
+    } catch (e) {
+      setMessage({ type: 'error', text: `Bağlantı hatası: ${e}` });
     }
+    setLoading(false);
   };
 
   const handleDisconnect = async () => {
-    setStatus('Bağlantı kesiliyor...');
+    setLoading(true);
+    setMessage(null);
     try {
-      await onDisconnect(iface);
-      setStatus('Bağlantı kesildi ✓');
-    } catch (e: any) {
-      setStatus(`Hata: ${e}`);
+      await vpnDisconnect(iface);
+      setMessage({ type: 'success', text: 'VPN bağlantısı kesildi.' });
+      setTimeout(onStatusChange, 1000);
+    } catch (e) {
+      setMessage({ type: 'error', text: `Bağlantı kesme hatası: ${e}` });
     }
+    setLoading(false);
   };
 
   return (
-    <div style={{ marginTop: '1rem' }}>
-      <h2>VPN Bağlantısı</h2>
-      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
-        <button onClick={handleConnect} disabled={loading}>
-          Bağlan
-        </button>
-        <button onClick={handleDisconnect} disabled={loading}>
-          Kes
-        </button>
+    <div className="card">
+      <div className="card__header">
+        <span className="card__title">VPN Bağlantısı</span>
+        {loading && <Spinner />}
       </div>
-      {status && (
-        <pre style={{ padding: '0.5rem', background: '#f5f5f5', borderRadius: '4px', fontSize: '0.9em' }}>
-          {status}
-        </pre>
-      )}
-      <div style={{ marginTop: '0.5rem' }}>
-        <label style={{ display: 'block', marginBottom: '0.25rem' }}>
-          Config yolu:
+
+      {message && <Message type={message.type} text={message.text} />}
+
+      <div className="grid-2">
+        <div className="input-group">
+          <label>Config yolu</label>
           <input
+            className="input"
             type="text"
             value={configPath}
             onChange={(e) => setConfigPath(e.target.value)}
-            style={{ marginLeft: '0.5rem', width: '350px' }}
+            placeholder="/etc/wireguard/wg0.conf"
           />
-        </label>
-      </div>
-      <div style={{ marginTop: '0.25rem' }}>
-        <label style={{ display: 'block', marginBottom: '0.25rem' }}>
-          Arayüz adı:
+        </div>
+        <div className="input-group">
+          <label>Arayüz adı</label>
           <input
+            className="input"
             type="text"
             value={iface}
             onChange={(e) => setIface(e.target.value)}
-            style={{ marginLeft: '0.5rem', width: '100px' }}
+            placeholder="wg0"
+            style={{ maxWidth: 120 }}
           />
-        </label>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+        <button
+          className="btn btn--primary"
+          onClick={handleConnect}
+          disabled={loading || !configPath.trim()}
+        >
+          {loading ? 'Bağlanıyor...' : 'Bağlan'}
+        </button>
+        <button
+          className="btn btn--danger"
+          onClick={handleDisconnect}
+          disabled={loading || !iface.trim()}
+        >
+          {loading ? 'Kesiliyor...' : 'Bağlantıyı Kes'}
+        </button>
       </div>
     </div>
   );

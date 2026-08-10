@@ -1,0 +1,22 @@
+interface Props {
+  label: string;
+  connected: boolean | null;
+}
+
+export default function StatusIndicator({ label, connected }: Props) {
+  const className =
+    connected === null
+      ? 'status--loading'
+      : connected
+        ? 'status--connected'
+        : 'status--disconnected';
+
+  const text = connected === null ? 'Yükleniyor...' : connected ? 'Bağlı' : 'Bağlı değil';
+
+  return (
+    <span className={`status ${className}`}>
+      <span className="status__dot" />
+      {label}: {text}
+    </span>
+  );
+}
