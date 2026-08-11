@@ -6,7 +6,7 @@ on:
       - 'v*'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build-and-sign:
@@ -90,6 +90,8 @@ jobs:
     needs: build-and-sign
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
@@ -102,7 +104,11 @@ jobs:
       - name: Generate checksums
         run: |
           cd dist
-          find . -maxdepth 1 -type f ! -name 'checksums.txt' -exec sha256sum {} \; > checksums.txt
+          if command -v sha256sum > /dev/null 2>&1; then
+            find . -maxdepth 1 -type f ! -name 'checksums.txt' -exec sha256sum {} \; > checksums.txt
+          else
+            find . -maxdepth 1 -type f ! -name 'checksums.txt' -exec shasum -a 256 {} \; > checksums.txt
+          fi
           cat checksums.txt
 
       - name: Create release

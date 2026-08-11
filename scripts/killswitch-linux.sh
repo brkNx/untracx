@@ -16,6 +16,10 @@ die() {
 
 [[ $EUID -eq 0 ]] || die "root olarak calistirin"
 
+# SECURITY: Validate environment variables to prevent nftables command injection
+[[ "$WG_IFACE" =~ ^[A-Za-z0-9_=+.-]{1,15}$ ]] || die "gecersiz WG_IFACE: $WG_IFACE"
+[[ "$WG_SUBNET" =~ ^[0-9./]+$ ]] || die "gecersiz WG_SUBNET: $WG_SUBNET"
+
 detect_out_iface() {
   OUT_IFACE="$(ip -4 route show default | awk 'NR == 1 { print $5 }')"
   [[ -n "$OUT_IFACE" ]] || die "varsayilan dis arayuz bulunamadi"

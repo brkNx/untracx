@@ -82,7 +82,15 @@ main() {
   ls -la "${DIST_DIR}/"
 
   log "SHA-256 saglamalar yaziliyor: ${DIST_DIR}/checksums.txt"
-  (cd "${DIST_DIR}" && find . -maxdepth 1 -type f ! -name 'checksums.txt' -exec sha256sum {} \; > checksums.txt)
+  # SECURITY: Use portable checksum command — sha256sum on Linux, shasum on macOS
+  if command -v sha256sum > /dev/null 2>&1; then
+    SHA_CMD="sha256sum"
+  elif command -v shasum > /dev/null 2>&1; then
+    SHA_CMD="shasum -a 256"
+  else
+    die "sha256sum veya shasum bulunamadi"
+  fi
+  (cd "${DIST_DIR}" && find . -maxdepth 1 -type f ! -name 'checksums.txt' -exec $SHA_CMD {} \; > checksums.txt)
   cat "${DIST_DIR}/checksums.txt"
 }
 

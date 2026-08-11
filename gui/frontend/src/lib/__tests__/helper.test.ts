@@ -97,14 +97,13 @@ describe('helper', () => {
     });
   });
 
-  it('keygen returns key pair', async () => {
+  it('keygen returns key pair (public key only)', async () => {
+    // SECURITY: keygen now returns only the public key, not the private key
     mockInvoke.mockResolvedValue({
       ok: true,
-      privateKey: 'priv123',
       publicKey: 'pub456',
     });
     const result = await keygen();
-    expect(result.privateKey).toBe('priv123');
     expect(result.publicKey).toBe('pub456');
   });
 

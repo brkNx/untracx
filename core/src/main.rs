@@ -105,11 +105,12 @@ fn run(cli: Cli) -> Result<(), String> {
         Commands::Keygen => {
             let kp = keys::generate();
             eprintln!("Özel anahtar stdout'a yazılmadı; güvenli şekilde kaydedin.");
-            println!("{}", kp.public);
+            println!("{}", kp.public());
         }
         Commands::Pubkey => {
             let mut private_b64 = String::new();
             io::stdin()
+                .take(65536)
                 .read_to_string(&mut private_b64)
                 .map_err(|e| e.to_string())?;
             let trimmed = private_b64.trim();
@@ -117,8 +118,9 @@ fn run(cli: Cli) -> Result<(), String> {
                 private_b64.zeroize();
                 return Err("stdin boş; özel anahtarı pipe ile gönderin".into());
             }
-            let pubkey = keys::public_from_private(trimmed)?;
+            let result = keys::public_from_private(trimmed);
             private_b64.zeroize();
+            let pubkey = result?;
             println!("{}", pubkey);
         }
         Commands::GenConfig {
@@ -132,6 +134,7 @@ fn run(cli: Cli) -> Result<(), String> {
         } => {
             let mut private_b64 = String::new();
             io::stdin()
+                .take(65536)
                 .read_to_string(&mut private_b64)
                 .map_err(|e| e.to_string())?;
             let trimmed = private_b64.trim();
@@ -139,7 +142,11 @@ fn run(cli: Cli) -> Result<(), String> {
                 private_b64.zeroize();
                 return Err("stdin boş; özel anahtarı pipe ile gönderin".into());
             }
-            keys::validate_private(trimmed)?;
+            // SECURITY: validate_private returns decoded bytes — zeroize immediately
+            {
+                let mut raw = keys::validate_private(trimmed)?;
+                raw.zeroize();
+            }
             let cfg = config::ClientConfig {
                 client_private: trimmed,
                 server_public: &server_public,
@@ -149,13 +156,14 @@ fn run(cli: Cli) -> Result<(), String> {
                 mtu,
                 port,
             };
-            let rendered = config::render(&cfg)?;
+            let result = config::render(&cfg);
+            private_b64.zeroize();
+            let rendered = result?;
             validate_output_path(&output)?;
             fs::write(&output, rendered).map_err(|e| e.to_string())?;
             set_perms_600(&output);
             println!("✓ {output} yazıldı");
             println!("Bağlanmak için: sudo untracx connect {output}");
-            private_b64.zeroize();
         }
         Commands::Connect { config } => {
             validate_config_path(&config)?;
@@ -170,7 +178,7 @@ fn run(cli: Cli) -> Result<(), String> {
             port,
             output,
         } => {
-            let private_key = read_private_key_from_stdin()?;
+            let mut private_key = read_private_key_from_stdin()?;
             let cfg = config::ClientConfig {
                 client_private: &private_key,
                 server_public: &server_public,
@@ -184,6 +192,7 @@ fn run(cli: Cli) -> Result<(), String> {
             validate_output_path(&output)?;
             fs::write(&output, rendered).map_err(|e| e.to_string())?;
             set_perms_600(&output);
+            private_key.zeroize();
             println!("✓ {output} yazıldı (stdin'den okunan private key kullanıldı)");
             println!("Bağlanmak için: sudo untracx connect {output}");
         }
@@ -199,10 +208,13 @@ fn run(cli: Cli) -> Result<(), String> {
 
 fn read_private_key_from_stdin() -> Result<String, String> {
     let mut buf = String::new();
+    // SECURITY: Limit stdin read to 64 KiB to prevent OOM from malicious/accidental input
     io::stdin()
+        .take(65536)
         .read_to_string(&mut buf)
         .map_err(|e| e.to_string())?;
     let key = buf.trim().to_string();
+    buf.zeroize();
     if key.is_empty() {
         return Err("stdin boş kaldı; private key sağlayın".into());
     }
@@ -255,7 +267,10 @@ fn set_perms_600(path: &str) {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let _ = fs::set_permissions(Path::new(path), fs::Permissions::from_mode(0o600));
+        if let Err(e) = fs::set_permissions(Path::new(path), fs::Permissions::from_mode(0o600)) {
+            eprintln!("UYARI: {path} izinleri ayarlanamadı (0600): {e}");
+            eprintln!("UYARI: Özel anahtar içeren dosya başkaları tarafından okunabilir olabilir.");
+        }
     }
     #[cfg(not(unix))]
     {

@@ -16,6 +16,11 @@ export default class ErrorBoundary extends Component<Props, State> {
     return { hasError: true, error };
   }
 
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    // Log error details for debugging — in production, send to monitoring service
+    console.error('ErrorBoundary caught:', error, errorInfo.componentStack);
+  }
+
   render() {
     if (this.state.hasError) {
       return (

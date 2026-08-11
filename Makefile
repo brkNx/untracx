@@ -1,4 +1,6 @@
 .PHONY: all build build-cli build-gui dev-gui test test-core test-gui lint lint-gui clean check install
+SHELL := /bin/bash
+.DELETE_ON_ERROR:
 
 all: build
 

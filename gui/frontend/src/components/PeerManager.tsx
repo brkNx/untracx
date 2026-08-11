@@ -11,14 +11,16 @@ export default function PeerManager() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  const [interfaceName, setInterfaceName] = useState('wg0');
+
   const refresh = useCallback(async () => {
     try {
-      const result = await peerList();
+      const result = await peerList(interfaceName);
       setPeers(result.peers ?? []);
     } catch {
       setPeers([]);
     }
-  }, []);
+  }, [interfaceName]);
 
   useEffect(() => {
     refresh();
@@ -68,6 +70,17 @@ export default function PeerManager() {
       </div>
 
       {message && <Message type={message.type} text={message.text} />}
+
+      <div className="input-group">
+        <label>Arayüz</label>
+        <input
+          className="input"
+          type="text"
+          value={interfaceName}
+          onChange={(e) => setInterfaceName(e.target.value)}
+          style={{ maxWidth: 120 }}
+        />
+      </div>
 
       {peers.length === 0 ? (
         <div className="empty">Aktif peer yok.</div>

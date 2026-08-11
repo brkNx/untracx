@@ -44,8 +44,8 @@ export async function vpnStatus(): Promise<VpnStatus> {
   return invokeCommand<VpnStatus>('vpn_status');
 }
 
-export async function peerList(): Promise<PeerListResult> {
-  return invokeCommand<PeerListResult>('peer_list');
+export async function peerList(interfaceName?: string): Promise<PeerListResult> {
+  return invokeCommand<PeerListResult>('peer_list', interfaceName ? { iface: interfaceName } : undefined);
 }
 
 export async function peerAdd(name: string): Promise<PeerActionResult> {

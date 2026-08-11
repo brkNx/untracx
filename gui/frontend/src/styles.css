@@ -83,7 +83,7 @@ body {
   color: var(--text-primary);
 }
 
-.app__nav button--active {
+.app__nav button.button--active {
   color: var(--accent-blue);
   border-bottom-color: var(--accent-blue);
 }
@@ -203,6 +203,12 @@ body {
 
 .input:focus {
   border-color: var(--border-focus);
+}
+
+.btn:focus-visible,
+.input:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
 }
 
 .input::placeholder {

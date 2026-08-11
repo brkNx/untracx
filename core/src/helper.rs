@@ -1,6 +1,7 @@
 use serde_json::{json, Value};
 use std::fs;
 use std::io::{Read as _, Write as _};
+use std::os::unix::io::AsRawFd;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::Path;
 use std::process::Command;
@@ -37,6 +38,14 @@ pub fn start() -> Result<(), String> {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     let listener = UnixListener::bind(&path).map_err(|e| e.to_string())?;
+    // SECURITY: Set restrictive permissions on the socket to prevent
+    // unauthorized local users from connecting and issuing commands.
+    #[cfg(unix)]
+    {
+        unsafe {
+            let _ = libc::fchmod(listener.as_raw_fd(), libc::S_IRUSR | libc::S_IWUSR);
+        }
+    }
     println!("Helper dinliyor: {}", path);
     println!("Ctrl+C ile durdurun.");
     for stream in listener.incoming() {
@@ -132,7 +141,15 @@ fn cmd_connect_req(req: &Value) -> Value {
     if iface.is_empty() {
         return json!({"ok": false, "error": "Gecersiz config dosya adi"});
     }
-    let out = Command::new("wg-quick").args(["up", &iface]).output();
+    // SECURITY: Validate interface name before passing to wg-quick to prevent
+    // any potential command injection via malicious filenames.
+    if !is_valid_iface_name(&iface) {
+        return json!({"ok": false, "error": format!("Gecersiz arayuz adi: {}", iface)});
+    }
+    // SECURITY: Pass full config path to wg-quick, not just interface name.
+    // wg-quick looks for /etc/wireguard/<iface>.conf by default, but configs
+    // may reside in other allowed directories (e.g., ~/.config/untracx/).
+    let out = Command::new("wg-quick").args(["up", path]).output();
     match out {
         Ok(o) if o.status.success() => json!({"ok": true, "iface": iface}),
         Ok(o) => json!({"ok": false, "error": String::from_utf8_lossy(&o.stderr).to_string()}),
@@ -210,15 +227,18 @@ fn send_json(stream: &mut UnixStream, val: &Value) -> Result<(), String> {
 fn recv_json(stream: &mut UnixStream) -> Result<Value, String> {
     let mut buf = Vec::new();
     let mut tmp = [0u8; 4096];
+    const MAX_SIZE: usize = 65536;
     loop {
         let n = stream.read(&mut tmp).map_err(|e| e.to_string())?;
         if n == 0 {
             break;
         }
-        buf.extend_from_slice(&tmp[..n]);
-        if buf.len() >= 65536 {
+        // SECURITY: Check buffer size AFTER reading to enforce hard limit.
+        // Previous check before extend allowed overshoot by up to 4096 bytes.
+        if buf.len() + n > MAX_SIZE {
             return Err("JSON mesaji cok buyuk".into());
         }
+        buf.extend_from_slice(&tmp[..n]);
     }
     let text = String::from_utf8(buf).map_err(|e| e.to_string())?;
     serde_json::from_str(&text).map_err(|e| e.to_string())

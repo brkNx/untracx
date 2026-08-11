@@ -42,7 +42,6 @@ export interface CommandResult {
 
 export interface KeyPair {
   ok: boolean;
-  privateKey: string;
   publicKey: string;
 }
 

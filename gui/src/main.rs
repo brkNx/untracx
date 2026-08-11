@@ -1,4 +1,17 @@
 use untracx::helper;
+use zeroize::Zeroize;
+
+/// Validates a WireGuard interface/peer name against Linux naming rules.
+/// Allows: alphanumeric, underscore, hyphen, equals, plus, dot (max 15 chars)
+fn is_valid_iface_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 15
+        && name != "."
+        && !name.contains("..")
+        && name.chars().all(|c| {
+            c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '=' | '+' | '.')
+        })
+}
 
 fn run_systemctl(args: &[&str]) -> Result<String, String> {
     let output = std::process::Command::new("systemctl")
@@ -60,9 +73,15 @@ fn vpn_status() -> Result<serde_json::Value, String> {
 // ── Peer yönetimi ──
 
 #[tauri::command]
-fn peer_list() -> Result<serde_json::Value, String> {
+fn peer_list(iface: Option<String>) -> Result<serde_json::Value, String> {
+    let iface = iface.unwrap_or_else(|| "wg0".to_string());
+    // Validate interface name to prevent command injection
+    if !is_valid_iface_name(&iface) {
+        return Err(format!("Geçersiz arayüz adı: {}", iface));
+    }
+    // SECURITY: Use absolute path for wg to prevent PATH injection via sudo
     let output = std::process::Command::new("sudo")
-        .args(["wg", "show", "wg0", "peers"])
+        .args(["/usr/bin/wg", "show", &iface, "peers"])
         .output()
         .map_err(|e| e.to_string())?;
     if output.status.success() {
@@ -70,9 +89,14 @@ fn peer_list() -> Result<serde_json::Value, String> {
         let peers: Vec<serde_json::Value> = text
             .lines()
             .filter(|l| !l.trim().is_empty())
+            // Validate each line looks like a base64-encoded public key
+            .filter(|l| {
+                let trimmed = l.trim();
+                trimmed.len() >= 32 && trimmed.len() <= 64 && trimmed.chars().all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '=' )
+            })
             .map(|l| serde_json::json!({"publicKey": l.trim()}))
             .collect();
-        Ok(serde_json::json!({"ok": true, "peers": peers}))
+        Ok(serde_json::json!({"ok": true, "peers": peers, "interface": iface}))
     } else {
         Err(String::from_utf8_lossy(&output.stderr).to_string())
     }
@@ -80,8 +104,13 @@ fn peer_list() -> Result<serde_json::Value, String> {
 
 #[tauri::command]
 fn peer_add(name: String) -> Result<serde_json::Value, String> {
+    // Validate peer name to prevent command injection
+    if !is_valid_iface_name(&name) {
+        return Err(format!("Geçersiz cihaz adı: {}", name));
+    }
+    // SECURITY: Use absolute path to prevent PATH injection via sudo
     let output = std::process::Command::new("sudo")
-        .args(["untracx-add-peer", &name])
+        .args(["/usr/local/bin/untracx-add-peer", &name])
         .output()
         .map_err(|e| e.to_string())?;
     if output.status.success() {
@@ -95,8 +124,13 @@ fn peer_add(name: String) -> Result<serde_json::Value, String> {
 
 #[tauri::command]
 fn peer_remove(name: String) -> Result<serde_json::Value, String> {
+    // Validate peer name to prevent command injection
+    if !is_valid_iface_name(&name) {
+        return Err(format!("Geçersiz cihaz adı: {}", name));
+    }
+    // SECURITY: Use absolute path to prevent PATH injection via sudo
     let output = std::process::Command::new("sudo")
-        .args(["untracx-remove-peer", &name])
+        .args(["/usr/local/bin/untracx-remove-peer", &name])
         .output()
         .map_err(|e| e.to_string())?;
     if output.status.success() {
@@ -113,10 +147,12 @@ fn peer_remove(name: String) -> Result<serde_json::Value, String> {
 #[tauri::command]
 fn keygen() -> Result<serde_json::Value, String> {
     let kp = untracx::keys::generate();
+    // SECURITY: Do NOT return the private key to the frontend.
+    // The frontend only needs the public key for display.
+    // The private key must be handled securely in the UI and never passed through IPC.
     Ok(serde_json::json!({
         "ok": true,
-        "privateKey": kp.private,
-        "publicKey": kp.public,
+        "publicKey": kp.public(),
     }))
 }
 
@@ -131,7 +167,9 @@ fn public_from_private(private_key: String) -> Result<serde_json::Value, String>
 
 #[tauri::command]
 fn validate_private_key(private_key: String) -> Result<serde_json::Value, String> {
-    untracx::keys::validate_private(&private_key)?;
+    // SECURITY: Zeroize the returned raw key bytes after validation
+    let mut raw = untracx::keys::validate_private(&private_key)?;
+    raw.zeroize();
     Ok(serde_json::json!({"ok": true, "valid": true}))
 }
 
@@ -171,6 +209,8 @@ fn generate_config(
 
 #[tauri::command]
 fn save_config(content: String, path: String) -> Result<serde_json::Value, String> {
+    // Validate the path to prevent path traversal and arbitrary file writes
+    validate_output_path(&path)?;
     std::fs::write(&path, content).map_err(|e| e.to_string())?;
     #[cfg(unix)]
     {
@@ -179,6 +219,30 @@ fn save_config(content: String, path: String) -> Result<serde_json::Value, Strin
             .map_err(|e| e.to_string())?;
     }
     Ok(serde_json::json!({"ok": true, "path": path}))
+}
+
+/// Validates output path to prevent path traversal attacks.
+/// Based on the validation in core/src/main.rs but adapted for GUI use.
+fn validate_output_path(path: &str) -> Result<(), String> {
+    use std::path::Path;
+    let p = Path::new(path);
+    let stem = p
+        .file_stem()
+        .ok_or("Geçersiz çıktı yolu")?
+        .to_string_lossy();
+    if stem.contains('/') || stem.contains(' ') || stem.is_empty() {
+        return Err("Çıkış dosya adı geçersiz (path traversal riski)".into());
+    }
+    if p.components().count() > 1 {
+        let parent = p.parent().unwrap_or(Path::new(""));
+        for comp in parent.components() {
+            let s = comp.as_os_str().to_string_lossy();
+            if s == ".." {
+                return Err("Çıkış yolu '..' içeremez".into());
+            }
+        }
+    }
+    Ok(())
 }
 
 // ── App giriş noktası ──

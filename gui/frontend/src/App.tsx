@@ -67,7 +67,7 @@ export default function App() {
           {TABS.map((tab) => (
             <button
               key={tab.key}
-              className={activeTab === tab.key ? 'app__nav button--active' : ''}
+              className={activeTab === tab.key ? 'app__nav button--active' : 'app__nav'}
               onClick={() => setActiveTab(tab.key)}
             >
               {tab.label}

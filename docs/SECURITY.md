@@ -1,4 +1,4 @@
-# Güvenlik ve mahremiyet modeli
+# Güvenlik ve mahremiyet modeli (v1.1, 2026-08-11)
 
 ## Korunan tehditler
 

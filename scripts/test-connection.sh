@@ -1,16 +1,19 @@
 #!/usr/bin/env bash
 # untracx - gercek cihaz baglanti testi (istemci tarafinda calistirilir)
 # Kullanim: bash scripts/test-connection.sh [peer-adi]
-# Varsayilanlar: UNTRACX_SERVER=158.180.50.114, UNTRACX_SSH_USER=ubuntu, UNTRACX_IFACE=wg0
+# Gereksinim: UNTRACX_SERVER ortam degiskeni zorunlu (ornegin: export UNTRACX_SERVER=1.2.3.4)
+# Varsayilanlar: UNTRACX_SSH_USER=ubuntu, UNTRACX_IFACE=wg0
 # Gereksinimler: ssh/scp, sudo (sunucuda ve yerelde), WireGuard.app veya wireguard-tools
 set -Eeuo pipefail
 
-SERVER="${UNTRACX_SERVER:-158.180.50.114}"
+# SECURITY: Server IP must be explicitly set — no hardcoded defaults
+SERVER="${UNTRACX_SERVER:?'UNTRACX_SERVER ayarlanmadi (ornegin: export UNTRACX_SERVER=1.2.3.4)'}"
 SSH_USER="${UNTRACX_SSH_USER:-ubuntu}"
 PEER_NAME="${1:-macbook}"
 IFACE="${UNTRACX_IFACE:-wg0}"
 CONF_FILE="untracx-${PEER_NAME}.conf"
-LOCAL_CONF="/tmp/${CONF_FILE}"
+# SECURITY: Use mktemp to prevent symlink attacks on config containing private keys
+LOCAL_CONF="$(mktemp "/tmp/${CONF_FILE}.XXXXXX")"
 
 log() { printf '\n[untracx-test] %s\n' "$*"; }
 die() { printf '\n[untracx-test] HATA: %s\n' "$*" >&2; exit 1; }

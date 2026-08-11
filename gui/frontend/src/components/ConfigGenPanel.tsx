@@ -91,7 +91,7 @@ export default function ConfigGenPanel() {
           <label>İstemci özel anahtarı</label>
           <input
             className="input"
-            type="text"
+            type="password"
             placeholder="X25519 private key (base64)"
             value={clientPrivate}
             onChange={(e) => setClientPrivate(e.target.value)}
@@ -112,7 +112,7 @@ export default function ConfigGenPanel() {
           <input
             className="input"
             type="text"
-            placeholder="158.180.50.114"
+            placeholder="10.0.0.1"
             value={serverIp}
             onChange={(e) => setServerIp(e.target.value)}
           />
@@ -143,8 +143,13 @@ export default function ConfigGenPanel() {
             className="input"
             type="number"
             placeholder="51820"
+            min={1}
+            max={65535}
             value={port}
-            onChange={(e) => setPort(Number(e.target.value))}
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              if (!isNaN(v) && v > 0 && v <= 65535) setPort(v);
+            }}
           />
         </div>
         <div className="input-group">
@@ -155,7 +160,10 @@ export default function ConfigGenPanel() {
             min={576}
             max={1500}
             value={mtu}
-            onChange={(e) => setMtu(Number(e.target.value))}
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              if (!isNaN(v) && v >= 576 && v <= 1500) setMtu(v);
+            }}
           />
         </div>
       </div>

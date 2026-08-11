@@ -3,5 +3,11 @@ interface Props {
 }
 
 export default function Spinner({ size = 'sm' }: Props) {
-  return <span className={`spinner ${size === 'lg' ? 'spinner--lg' : ''}`} />;
+  return (
+    <span
+      className={`spinner ${size === 'lg' ? 'spinner--lg' : ''}`}
+      role="status"
+      aria-label="Yükleniyor"
+    />
+  );
 }

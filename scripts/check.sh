@@ -3,6 +3,9 @@ set -euo pipefail
 
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 
+# Handle empty globs gracefully
+shopt -s nullglob
+
 for script in "$ROOT_DIR"/server/*.sh "$ROOT_DIR"/scripts/*.sh; do
   bash -n "$script"
 done

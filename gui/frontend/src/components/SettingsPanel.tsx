@@ -11,7 +11,7 @@ interface Settings {
 const DEFAULTS: Settings = {
   configPath: '/etc/wireguard/wg0.conf',
   interfaceName: 'wg0',
-  serverIp: '158.180.50.114',
+  serverIp: '',
   serverPort: 51820,
 };
 
@@ -107,8 +107,13 @@ export default function SettingsPanel() {
           <input
             className="input"
             type="number"
+            min={1}
+            max={65535}
             value={settings.serverPort}
-            onChange={(e) => update('serverPort', Number(e.target.value))}
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              if (!isNaN(v) && v > 0 && v <= 65535) update('serverPort', v);
+            }}
             style={{ maxWidth: 120 }}
           />
         </div>

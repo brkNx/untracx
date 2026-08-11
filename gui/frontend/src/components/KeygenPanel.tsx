@@ -19,9 +19,15 @@ export default function KeygenPanel() {
     setLoading(true);
     setMessage(null);
     try {
+      // SECURITY: keygen() now only returns the public key.
+      // The private key is NOT returned to the frontend to prevent leakage.
+      // Users must generate keys via the CLI for private key access.
       const kp = await keygen();
       setKeyPair(kp);
-      setMessage({ type: 'success', text: 'Yeni anahtar çifti üretildi.' });
+      setMessage({
+        type: 'info',
+        text: 'Yeni anahtar çifti üretildi. Özel anahtar CLI ile korunur. Public key panoya kopyalayın.',
+      });
     } catch (e) {
       setMessage({ type: 'error', text: `Üretim hatası: ${e}` });
     }
@@ -90,19 +96,7 @@ export default function KeygenPanel() {
       </div>
 
       {keyPair && (
-        <div className="grid-2" style={{ marginBottom: 16 }}>
-          <div className="input-group">
-            <label>Özel Anahtar</label>
-            <div className="key-display">
-              {keyPair.privateKey}
-              <button
-                className="btn btn--secondary btn--sm key-display__copy"
-                onClick={() => copyToClipboard(keyPair.privateKey)}
-              >
-                Kopyala
-              </button>
-            </div>
-          </div>
+        <div style={{ marginBottom: 16 }}>
           <div className="input-group">
             <label>Genel Anahtar</label>
             <div className="key-display">
@@ -115,6 +109,9 @@ export default function KeygenPanel() {
               </button>
             </div>
           </div>
+          <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 8 }}>
+            Özel anahtar CLI üzerinden güvenle yönetilir. GUI'de özel anahtar görüntülenmez.
+          </p>
         </div>
       )}
 
@@ -125,7 +122,7 @@ export default function KeygenPanel() {
           <div className="input-row">
             <input
               className="input"
-              type="text"
+              type="password"
               placeholder="X25519 özel anahtar (base64)"
               value={privInput}
               onChange={(e) => setPrivInput(e.target.value)}

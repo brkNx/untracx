@@ -122,8 +122,8 @@ mod tests {
         let kp = keys::generate();
         let server = keys::generate();
         ClientConfig {
-            client_private: Box::leak(kp.private.into_boxed_str()),
-            server_public: Box::leak(server.public.into_boxed_str()),
+            client_private: Box::leak(kp.private().to_string().into_boxed_str()),
+            server_public: Box::leak(server.public().to_string().into_boxed_str()),
             server_ip,
             client_ip,
             dns,

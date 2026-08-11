@@ -4,7 +4,11 @@ interface Props {
 }
 
 export default function Message({ type, text }: Props) {
-  return <div className={`message message--${type}`}>{text}</div>;
+  return (
+    <div className={`message message--${type}`} role="status" aria-live="polite">
+      {text}
+    </div>
+  );
 }
 
 export type MessageType = Props['type'];
