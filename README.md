@@ -136,6 +136,8 @@ curl -4 https://api.ipify.org
 
 `gui/` dizinde tam fonksiyonel Tauri 2 + React GUI mevcut. Dark tema, tab navigasyonu, tip güvenli API çağrıları ve test coverage ile.
 
+![untracx GUI](docs/gui-screenshot.png)
+
 ### Özellikler
 
 - **Durum** — WireGuard durumu, otomatik yenileme (10 sn)
