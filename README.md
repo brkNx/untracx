@@ -16,7 +16,28 @@ Untracx, kişisel kullanım için güvenli, doğrulanabilir ve sürdürülebilir
 
 ---
 
-## 2. Güvenlik ve Gizlilik Prensipleri (Ne Sağlar, Ne Sağlamaz?)
+## 2. Masaüstü GUI ve Arayüz Görünümü
+
+Untracx, **Tauri 2 + React 18 + TypeScript** altyapısıyla geliştirilmiş yerel masaüstü arayüzüne sahiptir. Özel anahtarlarınızı güvenle üretmenizi, istemci konfigürasyonlarını atomik olarak (`0600` dosya izinleriyle) kaydetmenizi ve tünel durumunu izlemenizi sağlar.
+
+<p align="center">
+  <img src="docs/gui-screenshot.png" alt="Untracx GUI Overview" width="850">
+</p>
+
+### 📸 Modül Ekran Görüntüleri
+
+| Modül | Ekran Görüntüsü | Açıklama |
+|---|---|---|
+| **1. Durum (Status)** | <img src="docs/screenshots/01_status_panel.png" width="380" alt="WireGuard Durumu"> | Aktif arayüz, handshake süresi, transfer edilen veri ve canlı bağlantı durumu. |
+| **2. Bağlantı (Connection)** | <img src="docs/screenshots/02_connection_panel.png" width="380" alt="VPN Bağlantısı"> | Konfigürasyon dosyasından tek tıkla bağlantı başlatma ve bağlantıyı kesme. |
+| **3. Yönetim (Peer Management)** | <img src="docs/screenshots/03_peer_management.png" width="380" alt="Peer Yönetimi"> | Kayıtlı cihaz genel anahtarları, cihaz ekleme ve iptal komutları. |
+| **4. Anahtar Yönetimi (Keys)** | <img src="docs/screenshots/04_key_management.png" width="380" alt="Anahtar Yönetimi"> | X25519 Curve25519 anahtar çifti üretimi, genel anahtar türetme ve doğrulama. |
+| **5. Config Üretici (Generator)** | <img src="docs/screenshots/05_config_generator.png" width="380" alt="Config Üretici"> | İstemci parametreleriyle standart WireGuard `.conf` üretimi ve atomik kaydetme. |
+| **6. Ayarlar (Settings)** | <img src="docs/screenshots/06_settings_panel.png" width="380" alt="Ayarlar Paneli"> | Varsayılan profil yolları, arayüz adı ve sunucu endpoint yapılandırması. |
+
+---
+
+## 3. Güvenlik ve Gizlilik Prensipleri (Ne Sağlar, Ne Sağlamaz?)
 
 ### Sağlanan Güvenlik
 - **Güçlü Şifreleme**: WireGuard (Noise Protocol Framework, Curve25519, ChaCha20-Poly1305, BLAKE2s) ile uçtan uca şifreleme.
@@ -32,15 +53,15 @@ Untracx, kişisel kullanım için güvenli, doğrulanabilir ve sürdürülebilir
 
 ---
 
-## 3. Sunucu Kurulumu (Ubuntu 22.04 / 24.04)
+## 4. Sunucu Kurulumu (Ubuntu 22.04 / 24.04)
 
-### 3.1 Ön Gereksinimler ve OCI Güvenlik Listesi
+### 4.1 Ön Gereksinimler ve OCI Güvenlik Listesi
 Kurulum yapılacak sunucuda aşağıdaki portların açık olması gerekir:
 - **SSH (TCP 22)**: Mümkünse yalnızca yönetim yapacağınız statik IP'ye açık olmalıdır.
 - **WireGuard (UDP 51820)**: İstemcilerin bağlanabilmesi için genel erişime açık olmalıdır.
 - **DNS (TCP/UDP 53)**: Dış internete **kesinlikle açılmamalıdır** (setup script'i tünel içinden otomatik izin verir).
 
-### 3.2 Kurulum Adımları
+### 4.2 Kurulum Adımları
 Sunucu dosyalarını sunucuya aktarın:
 ```bash
 scp -r server ubuntu@<SUNUCU_IP>:/tmp/untracx-server
@@ -55,9 +76,9 @@ sudo PUBLIC_ENDPOINT=<SUNUCU_IP> bash setup.sh
 
 ---
 
-## 4. Peer Yönetimi (Cihaz Ekleme & Silme)
+## 5. Peer Yönetimi (Cihaz Ekleme & Silme)
 
-### 4.1 Standart Profil Oluşturma (Sunucu Taraflı)
+### 5.1 Standart Profil Oluşturma (Sunucu Taraflı)
 ```bash
 sudo untracx-add-peer macbook
 ```
@@ -67,14 +88,14 @@ scp ubuntu@<SUNUCU_IP>:~/untracx-macbook.conf .
 ssh ubuntu@<SUNUCU_IP> 'rm -f ~/untracx-macbook.conf'
 ```
 
-### 4.2 Zero-Trust Profil Ekleme (İstemci Anahtarlı)
+### 5.2 Zero-Trust Profil Ekleme (İstemci Anahtarlı)
 İstemcide üretilen genel anahtar ile sunucuda peer kaydı açma:
 ```bash
 sudo untracx-add-peer telefon <CLIENT_PUBLIC_KEY> [PRESHARED_KEY]
 ```
 Bu modda sunucuda hiçbir zaman istemci özel anahtarı bulunmaz.
 
-### 4.3 Cihaz İptal Etme (Revocation)
+### 5.3 Cihaz İptal Etme (Revocation)
 ```bash
 sudo untracx-remove-peer macbook
 ```
@@ -82,15 +103,15 @@ Sunucu konfigürasyonu atomik olarak güncellenir, hedef peer anında tünelden 
 
 ---
 
-## 5. Doğrulama ve Test Suite'i
+## 6. Doğrulama ve Test Suite'i
 
-### 5.1 Yerel Kalite ve Güvenlik Testleri
+### 6.1 Yerel Kalite ve Güvenlik Testleri
 ```bash
 # Tüm kontrolleri çalıştır (Rust, Shell, Frontend, Fixture Testleri)
 bash scripts/check.sh
 ```
 
-### 5.2 Gerçek Cihaz Bağlantı Testi
+### 6.2 Gerçek Cihaz Bağlantı Testi
 ```bash
 export UNTRACX_SERVER=<SUNUCU_IP>
 bash scripts/test-connection.sh testclient
@@ -103,7 +124,7 @@ Bu test:
 
 ---
 
-## 6. Geliştirici & Lisans
+## 7. Geliştirici & Lisans
 
 - **Lisans**: MIT
 - **Teknoloji**: Rust 2021, Tauri 2, React 18, TypeScript, Vite, WireGuard.
