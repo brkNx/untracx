@@ -199,11 +199,11 @@ console.log('Capturing: 02_connection_panel.png');
 // 3. Peer Management (Yönetim)
 console.log('Capturing: 03_peer_management.png');
 {
-  const { page, context } = await createPage(940, 620);
+  const { page, context } = await createPage(940, 680);
   await page.click('#tab-management');
   await page.waitForTimeout(200);
-  await page.fill('input[placeholder="cihaz-adı"]', 'macbook-pro');
-  await page.click('button:has-text("Ekle")');
+  await page.fill('input[placeholder*="macbook"]', 'macbook-pro');
+  await page.click('button:has-text("Komut Üret")');
   await page.waitForTimeout(300);
   await page.screenshot({ path: `${SCREENSHOTS_DIR}/03_peer_management.png` });
   await context.close();

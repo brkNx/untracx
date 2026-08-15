@@ -15,18 +15,17 @@ export default function KeygenPanel() {
     text: string;
   } | null>(null);
 
+  const [showPrivate, setShowPrivate] = useState(false);
+
   const handleGenerate = async () => {
     setLoading(true);
     setMessage(null);
     try {
-      // SECURITY: keygen() now only returns the public key.
-      // The private key is NOT returned to the frontend to prevent leakage.
-      // Users must generate keys via the CLI for private key access.
       const kp = await keygen();
       setKeyPair(kp);
       setMessage({
-        type: 'info',
-        text: 'Yeni anahtar çifti üretildi. Özel anahtar CLI ile korunur. Public key panoya kopyalayın.',
+        type: 'success',
+        text: 'Yeni X25519 Curve25519 anahtar çifti ve PSK başarıyla üretildi.',
       });
     } catch (e) {
       setMessage({ type: 'error', text: `Üretim hatası: ${e}` });
@@ -41,7 +40,7 @@ export default function KeygenPanel() {
     try {
       const result = await publicFromPrivateKey(privInput.trim());
       setDerivedPublic(result);
-      setMessage({ type: 'success', text: 'Genel anahtar türetildi.' });
+      setMessage({ type: 'success', text: 'Genel anahtar başarıyla türetildi.' });
     } catch (e) {
       setMessage({ type: 'error', text: `Türetme hatası: ${e}` });
     }
@@ -54,7 +53,7 @@ export default function KeygenPanel() {
     setMessage(null);
     try {
       await validatePrivateKey(privInput.trim());
-      setMessage({ type: 'success', text: 'Özel anahtar geçerli.' });
+      setMessage({ type: 'success', text: 'Özel anahtar geçerli (32-byte Curve25519).' });
     } catch (e) {
       setMessage({ type: 'error', text: `Geçersiz özel anahtar: ${e}` });
     }
@@ -67,22 +66,22 @@ export default function KeygenPanel() {
     setMessage(null);
     try {
       await validatePublicKey(pubInput.trim());
-      setMessage({ type: 'success', text: 'Genel anahtar geçerli.' });
+      setMessage({ type: 'success', text: 'Genel anahtar geçerli (32-byte Curve25519).' });
     } catch (e) {
       setMessage({ type: 'error', text: `Geçersiz genel anahtar: ${e}` });
     }
     setLoading(false);
   };
 
-  const copyToClipboard = (text: string) => {
+  const copyToClipboard = (text: string, label = 'Panoya kopyalandı.') => {
     navigator.clipboard.writeText(text);
-    setMessage({ type: 'info', text: 'Panoya kopyalandı.' });
+    setMessage({ type: 'info', text: label });
   };
 
   return (
     <div className="card">
       <div className="card__header">
-        <span className="card__title">Anahtar Yönetimi</span>
+        <span className="card__title">Anahtar Yönetimi &amp; Zero-Trust Provizyon</span>
         {loading && <Spinner />}
       </div>
 
@@ -96,21 +95,77 @@ export default function KeygenPanel() {
       </div>
 
       {keyPair && (
-        <div style={{ marginBottom: 16 }}>
+        <div
+          style={{
+            marginBottom: 16,
+            background: 'var(--bg-input)',
+            padding: 12,
+            borderRadius: 'var(--radius-sm)',
+            border: '1px solid var(--border)',
+          }}
+        >
           <div className="input-group">
-            <label>Genel Anahtar</label>
+            <label>Genel Anahtar (Public Key — Sunucuya Verilecek):</label>
             <div className="key-display">
               {keyPair.publicKey}
               <button
                 className="btn btn--secondary btn--sm key-display__copy"
-                onClick={() => copyToClipboard(keyPair.publicKey)}
+                onClick={() => copyToClipboard(keyPair.publicKey, 'Genel anahtar kopyalandı.')}
               >
                 Kopyala
               </button>
             </div>
           </div>
+
+          {keyPair.privateKey && (
+            <div className="input-group" style={{ marginTop: 12 }}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: 4,
+                }}
+              >
+                <label style={{ margin: 0 }}>Özel Anahtar (Private Key — Gizli Tutulmalı):</label>
+                <button
+                  className="btn btn--secondary btn--sm"
+                  style={{ fontSize: 11, padding: '2px 6px' }}
+                  onClick={() => setShowPrivate(!showPrivate)}
+                >
+                  {showPrivate ? 'Gizle' : 'Göster'}
+                </button>
+              </div>
+              <div className="key-display">
+                {showPrivate ? keyPair.privateKey : '••••••••••••••••••••••••••••••••••••••••••••'}
+                <button
+                  className="btn btn--secondary btn--sm key-display__copy"
+                  onClick={() => copyToClipboard(keyPair.privateKey!, 'Özel anahtar kopyalandı.')}
+                >
+                  Kopyala
+                </button>
+              </div>
+            </div>
+          )}
+
+          {keyPair.presharedKey && (
+            <div className="input-group" style={{ marginTop: 12 }}>
+              <label>Pre-Shared Key (PSK — Kuantum Sonrası Koruma):</label>
+              <div className="key-display">
+                {keyPair.presharedKey}
+                <button
+                  className="btn btn--secondary btn--sm key-display__copy"
+                  onClick={() => copyToClipboard(keyPair.presharedKey!, 'PSK kopyalandı.')}
+                >
+                  Kopyala
+                </button>
+              </div>
+            </div>
+          )}
+
           <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 8 }}>
-            Özel anahtar CLI üzerinden güvenle yönetilir. GUI'de özel anahtar görüntülenmez.
+            🔒 <strong>Zero-Trust Güvenlik:</strong> Özel anahtarınız cihazınızda üretilmiştir.
+            Sunucu yöneticisine yalnızca Genel Anahtarınızı iletin.
           </p>
         </div>
       )}

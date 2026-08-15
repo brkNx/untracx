@@ -88,6 +88,21 @@ export default function ConnectionPanel({ onStatusChange }: Props) {
           {loading ? 'Kesiliyor...' : 'Bağlantıyı Kes'}
         </button>
       </div>
+
+      <div
+        style={{
+          marginTop: 14,
+          paddingTop: 10,
+          borderTop: '1px solid var(--border)',
+          fontSize: 12,
+          color: 'var(--text-secondary)',
+        }}
+      >
+        💡 <strong>Bağlantı Yöntemi:</strong> GUI üzerinden tek tıkla bağlanmak için ayrıcalıklı
+        helper servisinin (<code>sudo untracx helper start</code>) çalışması gerekir. Dilerseniz
+        oluşturduğunuz <code>.conf</code> dosyasını resmi WireGuard uygulamasına aktararak da
+        doğrudan kullanabilirsiniz.
+      </div>
     </div>
   );
 }
