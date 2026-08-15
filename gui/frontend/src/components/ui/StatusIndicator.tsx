@@ -14,7 +14,7 @@ export default function StatusIndicator({ label, connected }: Props) {
   const text = connected === null ? 'Yükleniyor...' : connected ? 'Bağlı' : 'Bağlı değil';
 
   return (
-    <span className={`status ${className}`}>
+    <span className={`status ${className}`} role="status" aria-live="polite">
       <span className="status__dot" />
       {label}: {text}
     </span>

@@ -14,9 +14,14 @@ import type {
 
 async function invokeCommand<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   try {
-    return await invoke<T>(command, args);
+    const res = await invoke<T>(command, args);
+    if (res && typeof res === 'object' && 'ok' in res && (res as { ok: boolean }).ok === false) {
+      const errObj = res as { error?: string };
+      throw new Error(errObj.error || 'İşlem başarısız oldu');
+    }
+    return res;
   } catch (error) {
-    throw new Error(typeof error === 'string' ? error : String(error));
+    throw new Error(typeof error === 'string' ? error : (error as Error).message || String(error));
   }
 }
 
@@ -45,7 +50,10 @@ export async function vpnStatus(): Promise<VpnStatus> {
 }
 
 export async function peerList(interfaceName?: string): Promise<PeerListResult> {
-  return invokeCommand<PeerListResult>('peer_list', interfaceName ? { iface: interfaceName } : undefined);
+  return invokeCommand<PeerListResult>(
+    'peer_list',
+    interfaceName ? { iface: interfaceName } : undefined,
+  );
 }
 
 export async function peerAdd(name: string): Promise<PeerActionResult> {
@@ -80,6 +88,7 @@ export async function generateConfig(
   dns: string,
   mtu: number,
   port: number,
+  presharedKey?: string,
 ): Promise<ConfigResult> {
   return invokeCommand<ConfigResult>('generate_config', {
     clientPrivate,
@@ -89,6 +98,7 @@ export async function generateConfig(
     dns,
     mtu,
     port,
+    presharedKey: presharedKey || undefined,
   });
 }
 

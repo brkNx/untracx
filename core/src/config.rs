@@ -9,6 +9,7 @@ pub struct ClientConfig<'a> {
     pub dns: &'a str,
     pub mtu: u16,
     pub port: u16,
+    pub preshared_key: Option<&'a str>,
 }
 
 impl Default for ClientConfig<'_> {
@@ -21,6 +22,7 @@ impl Default for ClientConfig<'_> {
             dns: "10.66.66.1",
             mtu: 1420,
             port: 51820,
+            preshared_key: None,
         }
     }
 }
@@ -30,14 +32,20 @@ pub fn render(cfg: &ClientConfig) -> Result<String, String> {
 
     let mut out = String::new();
     writeln!(out, "[Interface]").unwrap();
-    writeln!(out, "PrivateKey = {}", cfg.client_private).unwrap();
-    writeln!(out, "Address = {}", cfg.client_ip).unwrap();
-    writeln!(out, "DNS = {}", cfg.dns).unwrap();
+    writeln!(out, "PrivateKey = {}", cfg.client_private.trim()).unwrap();
+    writeln!(out, "Address = {}", cfg.client_ip.trim()).unwrap();
+    writeln!(out, "DNS = {}", cfg.dns.trim()).unwrap();
     writeln!(out, "MTU = {}", cfg.mtu).unwrap();
     writeln!(out).unwrap();
     writeln!(out, "[Peer]").unwrap();
-    writeln!(out, "PublicKey = {}", cfg.server_public).unwrap();
-    writeln!(out, "Endpoint = {}:{}", cfg.server_ip, cfg.port).unwrap();
+    writeln!(out, "PublicKey = {}", cfg.server_public.trim()).unwrap();
+    if let Some(psk) = cfg.preshared_key {
+        let psk_trimmed = psk.trim();
+        if !psk_trimmed.is_empty() {
+            writeln!(out, "PresharedKey = {}", psk_trimmed).unwrap();
+        }
+    }
+    writeln!(out, "Endpoint = {}:{}", cfg.server_ip.trim(), cfg.port).unwrap();
     writeln!(out, "AllowedIPs = 0.0.0.0/0, ::/0").unwrap();
     writeln!(out, "PersistentKeepalive = 25").unwrap();
     Ok(out)
@@ -55,6 +63,13 @@ pub fn validate(cfg: &ClientConfig) -> Result<(), String> {
         return Err("server-public zorunlu".into());
     }
     crate::keys::validate_public(cfg.server_public)?;
+
+    if let Some(psk) = cfg.preshared_key {
+        let psk_trimmed = psk.trim();
+        if !psk_trimmed.is_empty() {
+            crate::keys::validate_preshared_key(psk_trimmed)?;
+        }
+    }
 
     if !valid_ip(cfg.server_ip) {
         return Err(format!(
@@ -129,6 +144,7 @@ mod tests {
             dns,
             mtu,
             port,
+            preshared_key: None,
         }
     }
 
@@ -137,6 +153,23 @@ mod tests {
         let cfg = make("1.2.3.4", "10.66.66.2/32", "10.66.66.1", 1420, 51820);
         assert!(validate(&cfg).is_ok());
         assert!(render(&cfg).is_ok());
+    }
+
+    #[test]
+    fn config_with_psk_renders_correctly() {
+        let mut cfg = make("1.2.3.4", "10.66.66.2/32", "10.66.66.1", 1420, 51820);
+        let psk = keys::generate_psk();
+        cfg.preshared_key = Some(&psk);
+        assert!(validate(&cfg).is_ok());
+        let rendered = render(&cfg).unwrap();
+        assert!(rendered.contains(&format!("PresharedKey = {psk}")));
+    }
+
+    #[test]
+    fn rejects_invalid_psk() {
+        let mut cfg = make("1.2.3.4", "10.66.66.2/32", "10.66.66.1", 1420, 51820);
+        cfg.preshared_key = Some("invalid-psk");
+        assert!(validate(&cfg).is_err());
     }
 
     #[test]

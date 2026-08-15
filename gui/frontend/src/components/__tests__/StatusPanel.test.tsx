@@ -33,6 +33,11 @@ describe('StatusPanel', () => {
   it('has auto-refresh checkbox', async () => {
     mockInvoke.mockResolvedValue({ ok: true, connected: false });
     render(<StatusPanel />);
-    expect(screen.getByText('Otomatik yenile')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('Otomatik yenile')).toBeInTheDocument();
+    });
+    await waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalled();
+    });
   });
 });

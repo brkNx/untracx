@@ -25,6 +25,8 @@ export interface Peer {
 export interface PeerListResult {
   ok: boolean;
   peers: Peer[];
+  interface?: string;
+  note?: string;
   error?: string;
 }
 
@@ -43,6 +45,8 @@ export interface CommandResult {
 export interface KeyPair {
   ok: boolean;
   publicKey: string;
+  privateKey?: string;
+  presharedKey?: string;
 }
 
 export interface PublicKeyResult {

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Add a WireGuard peer without ever printing private key material to stdout.
+# Add a WireGuard peer with atomic transaction safety and optional zero-trust client key provisioning.
 set -Eeuo pipefail
 
 umask 077
@@ -13,12 +13,16 @@ die() {
   exit 1
 }
 
-[[ $EUID -eq 0 ]] || die "root olarak calistirin: sudo untracx-add-peer <cihaz-adi>"
-[[ $# -eq 1 ]] || die "kullanim: sudo untracx-add-peer <cihaz-adi>"
+[[ $EUID -eq 0 ]] || die "root olarak calistirin: sudo untracx-add-peer <cihaz-adi> [client-public-key] [preshared-key]"
+[[ $# -ge 1 && $# -le 3 ]] || die "kullanim: sudo untracx-add-peer <cihaz-adi> [client-public-key] [preshared-key]"
 
 CLIENT_NAME=$1
 [[ "$CLIENT_NAME" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$ ]] || \
   die "cihaz adi 1-32 karakter olmali; yalniz harf, rakam, nokta, alt cizgi ve tire kullanin"
+
+CLIENT_PUB_ARG="${2:-}"
+PRESHARED_KEY_ARG="${3:-}"
+
 [[ -r "$ENV_FILE" ]] || die "$ENV_FILE bulunamadi; once setup.sh calistirin"
 # shellcheck disable=SC1090
 . "$ENV_FILE"
@@ -26,7 +30,6 @@ CLIENT_NAME=$1
 WG_CONF="/etc/wireguard/${WG_IFACE}.conf"
 META_FILE="${PEER_DIR}/${CLIENT_NAME}.env"
 [[ -s "$WG_CONF" ]] || die "$WG_CONF bulunamadi"
-wg show "$WG_IFACE" > /dev/null 2>&1 || die "$WG_IFACE aktif degil"
 
 CALLING_USER="${SUDO_USER:-root}"
 if [[ "$CALLING_USER" == "root" ]]; then
@@ -40,11 +43,14 @@ fi
 OUT="${CALLING_HOME}/untracx-${CLIENT_NAME}.conf"
 
 install -d -o root -g root -m 0700 "$PEER_DIR"
+mkdir -p "$(dirname "$LOCK_FILE")"
 exec 9> "$LOCK_FILE"
 flock -x 9
 
 [[ ! -e "$META_FILE" ]] || die "${CLIENT_NAME} adli peer zaten var"
-[[ ! -e "$OUT" ]] || die "$OUT zaten var; once guvenli bir yere tasiyin veya silin"
+if [[ -z "$CLIENT_PUB_ARG" ]]; then
+  [[ ! -e "$OUT" ]] || die "$OUT zaten var; once guvenli bir yere tasiyin veya silin"
+fi
 
 PREFIX="${WG_SUBNET%.*}"
 USED_IPS="$(awk -F= '
@@ -69,21 +75,46 @@ for host in $(seq 2 254); do
 done
 [[ -n "$CLIENT_IP" ]] || die "${WG_SUBNET} icinde bos istemci adresi kalmadi"
 
-CLIENT_PRIV="$(wg genkey)"
-CLIENT_PUB="$(wg pubkey <<< "$CLIENT_PRIV")"
-PRESHARED_KEY="$(wg genpsk)"
-SERVER_PUB="$(<"/etc/wireguard/${WG_IFACE}.public.key")"
+if [[ -n "$CLIENT_PUB_ARG" ]]; then
+  CLIENT_PUB="$CLIENT_PUB_ARG"
+  [[ "$CLIENT_PUB" =~ ^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=?$ ]] || die "gecersiz istemci genel anahtari (base64 curve25519)"
+  CLIENT_PRIV=""
+  if [[ -n "$PRESHARED_KEY_ARG" ]]; then
+    PRESHARED_KEY="$PRESHARED_KEY_ARG"
+    [[ "$PRESHARED_KEY" =~ ^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=?$ ]] || die "gecersiz preshared key (base64)"
+  else
+    PRESHARED_KEY="$(wg genpsk)"
+  fi
+else
+  CLIENT_PRIV="$(wg genkey)"
+  CLIENT_PUB="$(wg pubkey <<< "$CLIENT_PRIV")"
+  PRESHARED_KEY="$(wg genpsk)"
+fi
 
-TMP_CLIENT="$(mktemp /tmp/untracx-client.XXXXXX)"
+SERVER_PUB="$(<"/etc/wireguard/${WG_IFACE}.public.key")"
+WG_MTU="${WG_MTU:-1420}"
+
+TMP_CLIENT="$(mktemp "${PEER_DIR}/.untracx-client.XXXXXX")"
 TMP_SERVER="$(mktemp "/etc/wireguard/.${WG_IFACE}.conf.XXXXXX")"
 BACKUP_SERVER="$(mktemp "/etc/wireguard/.${WG_IFACE}.backup.XXXXXX")"
-cleanup() {
-  rm -f "$TMP_CLIENT" "$TMP_SERVER" "$BACKUP_SERVER"
-}
-trap cleanup EXIT
+TMP_META="$(mktemp "${PEER_DIR}/.meta.XXXXXX")"
+CONF_COMMITTED=0
 
-WG_MTU="${WG_MTU:-1420}"
-cat > "$TMP_CLIENT" <<EOF
+cleanup() {
+  local exit_code=$?
+  if [[ "$CONF_COMMITTED" -eq 1 && "$exit_code" -ne 0 && -f "$BACKUP_SERVER" ]]; then
+    cp "$BACKUP_SERVER" "$WG_CONF" 2>/dev/null || true
+    if command -v wg >/dev/null 2>&1 && command -v wg-quick >/dev/null 2>&1; then
+      wg syncconf "$WG_IFACE" <(wg-quick strip "$WG_IFACE") 2>/dev/null || true
+    fi
+    rm -f "$META_FILE" "$OUT" 2>/dev/null || true
+  fi
+  rm -f "$TMP_CLIENT" "$TMP_SERVER" "$BACKUP_SERVER" "$TMP_META"
+}
+trap cleanup EXIT INT TERM
+
+if [[ -n "$CLIENT_PRIV" ]]; then
+  cat > "$TMP_CLIENT" <<CLIENT_EOF
 [Interface]
 PrivateKey = ${CLIENT_PRIV}
 Address = ${CLIENT_IP}/32
@@ -96,42 +127,62 @@ PresharedKey = ${PRESHARED_KEY}
 Endpoint = ${PUBLIC_ENDPOINT}:${WG_PORT}
 AllowedIPs = 0.0.0.0/0, ::/0
 PersistentKeepalive = 25
-EOF
-chmod 0600 "$TMP_CLIENT"
+CLIENT_EOF
+  chmod 0600 "$TMP_CLIENT"
+fi
+
+cat > "$TMP_META" <<META_EOF
+CLIENT_NAME=${CLIENT_NAME}
+CLIENT_PUBLIC_KEY=${CLIENT_PUB}
+CLIENT_IP=${CLIENT_IP}
+PRESHARED_KEY=${PRESHARED_KEY}
+META_EOF
+chmod 0600 "$TMP_META"
 
 cp --preserve=mode,ownership "$WG_CONF" "$TMP_SERVER"
 cp --preserve=mode,ownership "$WG_CONF" "$BACKUP_SERVER"
-cat >> "$TMP_SERVER" <<EOF
+cat >> "$TMP_SERVER" <<SRV_EOF
 
 # untracx-peer: ${CLIENT_NAME}
 [Peer]
 PublicKey = ${CLIENT_PUB}
 PresharedKey = ${PRESHARED_KEY}
 AllowedIPs = ${CLIENT_IP}/32
-EOF
+SRV_EOF
 chmod 0600 "$TMP_SERVER"
 
 mv "$TMP_SERVER" "$WG_CONF"
-if ! wg syncconf "$WG_IFACE" <(wg-quick strip "$WG_IFACE"); then
-  mv "$BACKUP_SERVER" "$WG_CONF"
-  wg syncconf "$WG_IFACE" <(wg-quick strip "$WG_IFACE") || true
-  die "peer canli yapilandirmaya uygulanamadi; sunucu config geri alindi"
+CONF_COMMITTED=1
+
+if command -v wg-quick >/dev/null 2>&1 && command -v wg >/dev/null 2>&1; then
+  if ! wg syncconf "$WG_IFACE" <(wg-quick strip "$WG_IFACE"); then
+    cp "$BACKUP_SERVER" "$WG_CONF"
+    wg syncconf "$WG_IFACE" <(wg-quick strip "$WG_IFACE") || true
+    die "peer canli yapilandirmaya uygulanamadi; sunucu config geri alindi"
+  fi
 fi
 
-if ! install -o "$CALLING_USER" -g "$CALLING_GROUP" -m 0600 "$TMP_CLIENT" "$OUT"; then
-  mv "$BACKUP_SERVER" "$WG_CONF"
-  wg syncconf "$WG_IFACE" <(wg-quick strip "$WG_IFACE") || true
-  die "istemci config disari aktarilamadi; peer geri alindi"
+mv "$TMP_META" "$META_FILE"
+
+if [[ -n "$CLIENT_PRIV" ]]; then
+  if ! install -o "$CALLING_USER" -g "$CALLING_GROUP" -m 0600 "$TMP_CLIENT" "$OUT"; then
+    cp "$BACKUP_SERVER" "$WG_CONF"
+    if command -v wg-quick >/dev/null 2>&1 && command -v wg >/dev/null 2>&1; then
+      wg syncconf "$WG_IFACE" <(wg-quick strip "$WG_IFACE") || true
+    fi
+    rm -f "$META_FILE"
+    die "istemci config disari aktarilamadi; peer geri alindi"
+  fi
 fi
 
-cat > "$META_FILE" <<EOF
-CLIENT_NAME=${CLIENT_NAME}
-CLIENT_PUBLIC_KEY=${CLIENT_PUB}
-CLIENT_IP=${CLIENT_IP}
-EOF
-chmod 0600 "$META_FILE"
+CONF_COMMITTED=0
 rm -f "$BACKUP_SERVER"
 
 printf 'Peer eklendi: %s -> %s\n' "$CLIENT_NAME" "$CLIENT_IP"
-printf 'Istemci config: %s (sahip: %s, izin: 0600)\n' "$OUT" "$CALLING_USER"
-printf 'Dosyayi cihaza kopyaladiktan sonra bu sunucu kopyasini silin.\n'
+if [[ -n "$CLIENT_PRIV" ]]; then
+  printf 'Istemci config: %s (sahip: %s, izin: 0600)\n' "$OUT" "$CALLING_USER"
+  printf 'Dosyayi cihaza kopyaladiktan sonra bu sunucu kopyasini silin.\n'
+else
+  printf 'Zero-trust modu: Sunucuda private key uretilmedi.\n'
+  printf 'PresharedKey: %s\n' "$PRESHARED_KEY"
+fi

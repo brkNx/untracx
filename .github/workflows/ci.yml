@@ -4,61 +4,106 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
-  rust:
+  rust-core:
+    name: Rust Core (Linux & Windows Check)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - uses: dtolnay/rust-toolchain@stable
         with:
+          targets: x86_64-pc-windows-msvc
           components: rustfmt, clippy
 
-      - name: Cache cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            core/target
-            gui/target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('core/Cargo.lock', 'gui/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-
-
-      - name: Format check (core)
+      - name: Rustfmt Check (core)
         run: cargo fmt --manifest-path core/Cargo.toml -- --check
 
-      - name: Test (core)
+      - name: Tests (core)
         run: cargo test --manifest-path core/Cargo.toml --locked
 
       - name: Clippy (core)
         run: cargo clippy --manifest-path core/Cargo.toml --locked -- -D warnings
 
-      - name: Format check (gui)
+      - name: Windows Target Compile Check (core)
+        run: cargo check --manifest-path core/Cargo.toml --target x86_64-pc-windows-msvc --locked
+
+  rust-gui:
+    name: Rust GUI Backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install system dependencies (WebKit & GTK)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Rustfmt Check (gui)
         run: cargo fmt --manifest-path gui/Cargo.toml -- --check
 
       - name: Clippy (gui)
         run: cargo clippy --manifest-path gui/Cargo.toml --locked -- -D warnings
 
-  shell:
+  frontend:
+    name: Frontend (React & TypeScript)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Install shellcheck
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: gui/frontend/package-lock.json
 
-      - name: Shell syntax + shellcheck
+      - name: Install dependencies
+        run: npm --prefix gui/frontend ci
+
+      - name: Prettier Format Check
+        run: npm --prefix gui/frontend run format:check
+
+      - name: ESLint
+        run: npm --prefix gui/frontend run lint
+
+      - name: Unit Tests
+        run: npm --prefix gui/frontend run test
+
+      - name: Production Build
+        run: npm --prefix gui/frontend run build
+
+      - name: NPM Security Audit
+        run: npm --prefix gui/frontend audit --audit-level=high
+
+  shell-and-security:
+    name: Shell Scripts & Lifecycle Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Syntax & ShellCheck
         run: |
-          for script in server/*.sh scripts/*.sh; do
+          for script in server/*.sh scripts/*.sh tests/*.sh; do
             bash -n "$script"
             shellcheck "$script"
           done
+
+      - name: Peer Lifecycle & Rollback Fixture Tests
+        run: bash tests/test-peer-lifecycle.sh

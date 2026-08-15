@@ -1,279 +1,109 @@
 # untracx
 
-Kişisel kullanım için WireGuard tabanlı VPN projesi. Hedef; önce güvenli ve tekrar üretilebilir bir sunucu kurulumu, ardından Rust/Tauri tabanlı masaüstü istemcisidir.
+Untracx, kişisel kullanım için güvenli, doğrulanabilir ve sürdürülebilir bir WireGuard VPN çözümüdür. Öncelikli odak; hatasız sunucu kurulumu, güvenli anahtar ve profil provizyonu ve resmi WireGuard istemcilerine sorunsuz profil aktarımıdır.
 
-> Durum: Aşama 1 ve Aşama 2 tamamlandı. Sunucu Oracle Cloud Always Free (Ubuntu 24.04 x86_64) üzerinde kurulu ve çalışıyor; peer yönetimi, Rust CLI güvenlik sertleştirmesi, ayrıcalıklı helper protokolü, Tauri 2 + React GUI (tam fonksiyonel — anahtar üretimi, config oluşturma, peer yönetimi, ayarlar) ve platforma özel kill-switch scriptleri hazır. Sıradaki adım gerçek cihazla handshake/egress testi.
+---
 
-## Canlı sunucu
+## 1. Desteklenen Platform Matrisi (v1)
 
-| Alan | Değer |
-|---|---|
-| Provider | Oracle Cloud Always Free |
-| OS | Ubuntu 24.04 (x86_64) |
-| Public IP | `158.180.50.114` |
-| Endpoint | `158.180.50.114:51820/udp` |
-| VPN alt ağı | `10.66.66.0/24` |
-| VPN DNS | `10.66.66.1` (Unbound, yalnız VPN alt ağı) |
-| Durum | Kurulum tamam; gerçek cihaz testi bekleniyor |
-
-## Ne sağlar, ne sağlamaz?
-
-- Cihaz ile Oracle VM arasındaki trafiği WireGuard ile şifreler.
-- Ortak Wi-Fi veya yerel ISP'nin bu tünelin içeriğini görmesini engeller.
-- İnternet trafiği Oracle VM'nin bulunduğu bölgeden çıkar.
-- Anonimlik sağlamaz: Oracle, hedef servisler ve oturum açtığınız hesaplar sizi farklı yollarla ilişkilendirebilir.
-- Türkiye veya Azerbaycan çıkış IP'si sağlamaz; bunun için o ülkelerde bir sunucu gerekir.
-- `AllowedIPs` tek başına kill-switch değildir. Platforma özel sızıntı engelleme Aşama 2 kapsamındadır.
-
-Detaylı sınırlar için [docs/SECURITY.md](docs/SECURITY.md) belgesine bakın.
-
-## Mevcut mimari
-
-```text
-Resmi WireGuard istemcisi / wg-quick
-              |
-        WireGuard tüneli
-              |
-Ubuntu 24.04 VM -> kernel WireGuard -> UFW/NAT -> Internet
-              |
-      Unbound recursive DNS
-```
-
-Planlanan masaüstü katmanı:
-
-```text
-React GUI -> Tauri/Rust -> ayrıcalıklı, dar kapsamlı helper -> işletim sistemi WireGuard backend'i
-```
-
-## Ücretsiz kullanım notu
-
-Oracle'ın güncel Always Free sınırları seçilen shape ve home region'a bağlıdır. x86_64 `VM.Standard.E2.1.Micro` ve Arm `VM.Standard.A1.Flex` seçenekleri farklı kapasitelere sahiptir. VM, boot volume ve ağ kaynaklarında **Always Free-eligible** etiketini Oracle Console'da doğrulamadan “0 maliyet” varsaymayın. Bütçe alarmı açmanız önerilir.
-
-Bu repo hem Ubuntu 24.04 x86_64 hem arm64 sunucuyu destekler.
-
-## 1. Oracle ağ kuralları
-
-Kurulumdan önce OCI Network Security Group veya Security List üzerinde:
-
-| Yön | Protokol/port | Kaynak | Amaç |
+| Katman | Platform / Ortam | Destek Durumu | Notlar |
 |---|---|---|---|
-| Ingress | TCP 22 | Mümkünse kendi public IP'niz `/32` | SSH yönetimi |
-| Ingress | UDP 51820 | Seyahatte kullanacaksanız `0.0.0.0/0` | WireGuard |
+| **Sunucu** | Ubuntu 22.04 / 24.04 LTS (x86_64 & arm64) | **Destekleniyor (Stable)** | Otomatik bootstrap (`setup.sh`), Unbound DNS, UFW, fail2ban, atomik peer yönetimi. |
+| **İstemci Provizyonu** | Resmi WireGuard İstemcileri (macOS, Windows, Linux, iOS, Android) | **Destekleniyor (Stable)** | Standart `.conf` profil üretimi, QR kod aktarımı, Zero-Trust anahtar desteği. |
+| **Masaüstü GUI** | macOS / Windows / Linux (Tauri 2 + React) | **Beta / Profil Yöneticisi** | Anahtar üretimi, Zero-Trust konfigürasyon oluşturma, profil kaydetme (0600) ve ayarlar. |
+| **Yerel Kill-Switch** | Linux (nftables) | **Beta** | `inet` fail-closed output filtresi (`policy drop`), DHCP/tünel istisnaları. |
+| **Yerel Kill-Switch** | macOS (`pf`) / Windows (WFP) | **Deneysel (Experimental)** | Resmi WireGuard uygulamasının yerel `AllowedIPs = 0.0.0.0/0, ::/0` sızıntı engellemesi önerilir. |
 
-TCP 53 veya UDP 53'ü internete açmayın; DNS yalnız VPN alt ağından kabul edilir. Ayrıntılı adımlar: [docs/ORACLE.md](docs/ORACLE.md).
+---
 
-## 2. Sunucu dosyalarını yükleme
+## 2. Güvenlik ve Gizlilik Prensipleri (Ne Sağlar, Ne Sağlamaz?)
 
-Repo private olduğu için `raw.githubusercontent.com/.../setup.sh` komutu kimlik doğrulamasız çalışmaz. Yerel checkout'tan bütün `server/` klasörünü yükleyin:
+### Sağlanan Güvenlik
+- **Güçlü Şifreleme**: WireGuard (Noise Protocol Framework, Curve25519, ChaCha20-Poly1305, BLAKE2s) ile uçtan uca şifreleme.
+- **Kuantum Sonrası Güvenlik (PSK)**: Tüm peer'lar için opsiyonel ve sunucu tarafında zorunlu 256-bit Pre-shared Key (PSK) koruması.
+- **Özel DNS Resolver**: Sunucu içinde Unbound recursive DNS resolver (`10.66.66.1:53`). Yalnızca WireGuard tüneli içinden erişilebilir, dış internete kapalıdır.
+- **Güvenli Dosya İşlemleri**: Özel anahtarlar bellekten anında silinir (`Zeroize`), konfigürasyon dosyaları diskte `0600` izinleri, `O_NOFOLLOW` ve atomik temp+rename ile yazılır.
+- **Zero-Trust Anahtar Üretimi**: İstemci özel anahtarı istemci cihazında üretilir; sunucu istemcinin özel anahtarını bilmez ve depolamaz.
 
+### Sınırlar ve Bilinen Kısıtlar
+- **Anonimlik Sağlamaz**: VPN servis sağlayıcısı (örn. Oracle Cloud) veya hedef internet servisleri çıkış IP'nizi ve bağlantı zaman damgalarını görebilir.
+- **Coğrafi Konum**: Çıkış IP'si sunucunun barındığı veri merkezine aittir (Türkiye/Azerbaycan çıkışı için o ülkelerde sunucu gerekir).
+- **Yerel Sızıntılar**: İşletim sistemi düzeyinde kill-switch aktif edilmeden veya resmi istemci kullanılmadan tünel çökmesi durumunda yerel trafik sızabilir.
+
+---
+
+## 3. Sunucu Kurulumu (Ubuntu 22.04 / 24.04)
+
+### 3.1 Ön Gereksinimler ve OCI Güvenlik Listesi
+Kurulum yapılacak sunucuda aşağıdaki portların açık olması gerekir:
+- **SSH (TCP 22)**: Mümkünse yalnızca yönetim yapacağınız statik IP'ye açık olmalıdır.
+- **WireGuard (UDP 51820)**: İstemcilerin bağlanabilmesi için genel erişime açık olmalıdır.
+- **DNS (TCP/UDP 53)**: Dış internete **kesinlikle açılmamalıdır** (setup script'i tünel içinden otomatik izin verir).
+
+### 3.2 Kurulum Adımları
+Sunucu dosyalarını sunucuya aktarın:
 ```bash
-scp -r server ubuntu@158.180.50.114:/tmp/untracx-server
-ssh ubuntu@158.180.50.114
+scp -r server ubuntu@<SUNUCU_IP>:/tmp/untracx-server
+ssh ubuntu@<SUNUCU_IP>
 ```
 
-Sunucuda:
-
+Sunucu üzerinde bootstrap scriptini çalıştırın:
 ```bash
 cd /tmp/untracx-server
-sudo PUBLIC_ENDPOINT=158.180.50.114 bash setup.sh
+sudo PUBLIC_ENDPOINT=<SUNUCU_IP> bash setup.sh
 ```
 
-Script şunları yapar:
+---
 
-- WireGuard, UFW, fail2ban ve unattended-upgrades kurar.
-- OCI dış ağ arayüzünü otomatik bulur; `eth0` varsaymaz.
-- Sunucu anahtarını ilk çalıştırmada üretir, sonraki çalıştırmalarda korur.
-- Peer kayıtlarını yeniden çalıştırmada silmez.
-- `10.66.66.1` üzerinde yalnız VPN alt ağına açık Unbound DNS kurar.
-- `untracx-add-peer` ve `untracx-remove-peer` komutlarını yükler.
+## 4. Peer Yönetimi (Cihaz Ekleme & Silme)
 
-## 3. İlk cihazı ekleme
-
-Sunucuda:
-
+### 4.1 Standart Profil Oluşturma (Sunucu Taraflı)
 ```bash
 sudo untracx-add-peer macbook
 ```
-
-Komut config dosyasını `sudo` çağrısını yapan kullanıcının home dizinine 0600 izinle yazar. Yerel bilgisayarda:
-
+Oluşturulan `~/untracx-macbook.conf` dosyasını bilgisayarınıza indirin ve resmi WireGuard uygulamasına aktarın:
 ```bash
-scp ubuntu@158.180.50.114:~/untracx-macbook.conf .
+scp ubuntu@<SUNUCU_IP>:~/untracx-macbook.conf .
+ssh ubuntu@<SUNUCU_IP> 'rm -f ~/untracx-macbook.conf'
 ```
 
-Dosyayı resmi WireGuard uygulamasına aktarın. Aktardıktan sonra sunucudaki geçici kopyayı silin:
-
+### 4.2 Zero-Trust Profil Ekleme (İstemci Anahtarlı)
+İstemcide üretilen genel anahtar ile sunucuda peer kaydı açma:
 ```bash
-ssh ubuntu@158.180.50.114 'rm -f ~/untracx-macbook.conf'
+sudo untracx-add-peer telefon <CLIENT_PUBLIC_KEY> [PRESHARED_KEY]
 ```
+Bu modda sunucuda hiçbir zaman istemci özel anahtarı bulunmaz.
 
-Kaybolan veya artık kullanılmayan cihazı iptal etmek için:
-
+### 4.3 Cihaz İptal Etme (Revocation)
 ```bash
 sudo untracx-remove-peer macbook
 ```
+Sunucu konfigürasyonu atomik olarak güncellenir, hedef peer anında tünelden düşürülür ve manuel peer kayıtları korunur.
 
-## 4. Doğrulama
+---
 
-Sunucuda:
+## 5. Doğrulama ve Test Suite'i
 
+### 5.1 Yerel Kalite ve Güvenlik Testleri
 ```bash
-sudo systemctl status wg-quick@wg0 --no-pager
-sudo wg show wg0
-sudo systemctl status unbound --no-pager
-sudo ufw status verbose
+# Tüm kontrolleri çalıştır (Rust, Shell, Frontend, Fixture Testleri)
+bash scripts/check.sh
 ```
 
-İstemci bağlandıktan sonra:
-
+### 5.2 Gerçek Cihaz Bağlantı Testi
 ```bash
-curl -4 https://api.ipify.org
+export UNTRACX_SERVER=<SUNUCU_IP>
+bash scripts/test-connection.sh testclient
 ```
+Bu test:
+1. Sunucuda güvenli geçici test peer'ı oluşturur.
+2. Tüneli ayağa kaldırır.
+3. IPv4 çıkış IP'sini, Unbound DNS çözümlemesini ve sayısal handshake zaman damgasını doğrular.
+4. Test bitiminde istemci ve sunucudaki tüm geçici kayıtları temizler.
 
-Çıktı sunucu endpoint'i olmalıdır. DNS ve kill-switch testleri tamamlanmadan istemciyi “sızıntısız” kabul etmeyin.
+---
 
-## GUI (Tauri 2 + React)
+## 6. Geliştirici & Lisans
 
-`gui/` dizinde tam fonksiyonel Tauri 2 + React GUI mevcut. Dark tema, tab navigasyonu, tip güvenli API çağrıları ve test coverage ile.
-
-![untracx GUI](docs/gui-screenshot.png)
-
-### Özellikler
-
-- **Durum** — WireGuard durumu, otomatik yenileme (10 sn)
-- **Bağlantı** — Config yolu seçimi, arayüz adı, bağlan/kes
-- **Yönetim** — Peer listesi, ekleme/kaldırma (onaylı), tablo görünümü
-- **Anahtarlar** — X25519 anahtar üretimi, public key türetme, validasyon
-- **Config Üretici** — WireGuard config oluşturma, dosyaya kaydetme (0600 izinli)
-- **Ayarlar** — Varsayılan config yolu, arayüz adı, sunucu bilgileri (kalıcı)
-
-### Kurulum
-
-```bash
-cd gui/frontend
-npm install
-npm run dev   # geliştirme sunucusu (http://localhost:5173)
-```
-
-Veya Makefile üzerinden:
-
-```bash
-make dev-gui    # geliştirme modu
-make build-gui  # production derleme
-make test-gui   # frontend testleri
-make lint-gui   # ESLint + Prettier kontrolü
-```
-
-### Tauri komutları
-
-| Komut | Açıklama |
-|---|---|
-| `helper_start` | systemd user service olarak helper'ı başlat |
-| `helper_stop` | helper servisini durdur |
-| `helper_status` | helper durumu + socket bilgisi |
-| `vpn_connect` | Config dosyasıyla VPN bağlantısı |
-| `vpn_down` | Arayüz adıyla VPN bağlantısını kes |
-| `vpn_status` | WireGuard durumunu sorgula |
-| `peer_list` | Aktif peer'leri listele |
-| `peer_add` | Yeni peer ekle |
-| `peer_remove` | Peer'ı kaldır |
-| `keygen` | Yeni X25519 anahtar çifti üret |
-| `public_from_private` | Özel anahtardan genel anahtar türet |
-| `validate_private_key` | Özel anahtarı doğrula |
-| `validate_public_key` | Genel anahtarı doğrula |
-| `generate_config` | WireGuard config üret |
-| `save_config` | Config'ı dosyaya kaydet (0600 izinli) |
-
-### Yapılandırma
-
-- `gui/tauri.conf.json` — ürün adı, versiyon, pencere boyutları, CSP
-- `gui/capabilities/default.json` — Tauri 2 capabilities (core, dialog, store izinleri)
-- `gui/frontend/src/lib/types.ts` — tüm API tipleri
-- `gui/frontend/src/lib/helper.ts` — tip güvenli Tauri invoke wrapper'ları
-- `gui/frontend/src/styles.css` — dark tema, BEM isimlendirme
-
-## Kill-switch ve DNS leak koruması
-
-Kill-switch, VPN tüneli kesildiğinde internet trafiğinin VPN dışına sızmasını engeller. Platformlara özel kill-switch scriptleri `scripts/` klasöründe bulunur:
-
-| Platform | Script | Mekanizma |
-|---|---|---|
-| Linux | `scripts/killswitch-linux.sh` | nftables (forward/output chain) |
-| macOS | `scripts/killswitch-macos.sh` | ApplicationFirewall (socketfilterfw) |
-| Windows | `scripts/killswitch-windows.ps1` | Windows Filtering Platform (New-NetFirewallRule) |
-
-Kullanım:
-
-```bash
-# Linux
-sudo bash scripts/killswitch-linux.sh ac
-sudo bash scripts/killswitch-linux.sh kapat
-sudo bash scripts/killswitch-linux.sh durum
-
-# macOS
-sudo bash scripts/killswitch-macos.sh ac
-sudo bash scripts/killswitch-macos.sh kapat
-sudo bash scripts/killswitch-macos.sh durum
-
-# Windows (PowerShell, yönetici)
-.\scripts\killswitch-windows.ps1 ac
-.\scripts\killswitch-windows.ps1 kapat
-.\scripts\killswitch-windows.ps1 durum
-```
-
-### DNS leak koruması
-
-Sunucu DNS'i yalnız VPN alt ağından kabul eder (`10.66.66.0/24`). Public 53 kapalıdır. İstemci tarafında `DNS = 10.66.66.1` ayarı tüm DNS sorgularını tünelden yönlendirir.
-
-Kill-switch aktifken DNS sorgularının ISP DNS sunucusuna sızmadığını doğrulayın:
-
-```bash
-# Linux/macOS
-dig +short myip.opendns.com @resolver1.opendns.com
-
-# Windows
-Resolve-DnsName myip.opendns.com -Server 208.67.222.222
-```
-
-Sonuç VPN sunucunun IP'sini göstermeli, ISP DNS sunucusunu göstermemelidir. VPN kesildikten sonra `dig @10.66.66.1 google.com` timeout olmalı (leak yok).
-
-## Geliştirici komutları
-
-```bash
-# Tüm kontroller (shell, Rust, frontend)
-./scripts/check.sh
-
-# Makefile üzerinden
-make check       # tüm kalite kontrolleri
-make test        # Rust + frontend testleri
-make lint        # ESLint + Prettier
-make build       # CLI + GUI derleme
-make clean       # build temizliği
-make release     # cross-platform imzalı paket
-```
-
-Bu komutlar; shell scriptlerini (syntax + shellcheck), core ve GUI Rust kodunu (fmt, test, clippy) ve frontend'i (tsc + vite build + vitest + eslint + prettier) denetler.
-
-## Yol haritası
-
-- [x] Private repo ve ilk Rust CLI iskeleti
-- [x] Güvenli/idempotent Ubuntu sunucu bootstrap
-- [x] Oracle Cloud Always Free sunucu kurulumu (`158.180.50.114`, Ubuntu 24.04 x86_64)
-- [x] Peer ekleme ve iptal etme
-- [x] Rust CLI güvenlik sertleştirmesi (stdin okuma, private key gizleme, path traversal koruması, libc FFI)
-- [x] Ayrıcalıklı helper protokolü (Unix socket + systemd servisi)
-- [x] Tauri 2 + React GUI (tam fonksiyonel — 16 Tauri komutu, 5 sekme, dark tema)
-- [x] Kill-switch scriptleri (Linux nftables + IPv6, macOS ApplicationFirewall, Windows WFP)
-- [x] Paket imzalama ve release workflow (scripts/sign-package.sh, .github/workflows/release.yml)
-- [x] CI kalite kapısı (fmt, test, clippy, shellcheck, frontend build)
-- [x] Dependabot (cargo/npm/GitHub-actions)
-- [x] Unit testler (Rust: 15 test, Frontend: 20 test)
-- [x] Frontend linting (ESLint + Prettier)
-- [x] Makefile (build, test, lint, check, clean, release)
-- [ ] Gerçek cihazla WireGuard handshake ve IPv4/DNS egress testi (scripts/test-connection.sh hazır)
-- [ ] System tray entegrasyonu
-- [ ] Klavye kısayolları
-
-## Lisans
-
-MIT
+- **Lisans**: MIT
+- **Teknoloji**: Rust 2021, Tauri 2, React 18, TypeScript, Vite, WireGuard.

@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
+# untracx - Linux Client Fail-Closed Kill-Switch (nftables)
+# Blocks all outbound traffic except encrypted tunnel egress, WireGuard endpoint UDP, loopback, and DHCP.
 set -euo pipefail
 
 WG_IFACE="${WG_IFACE:-wg0}"
-WG_SUBNET="${WG_SUBNET:-10.66.66.0/24}"
-OUT_IFACE=""
+SERVER_IP="${UNTRACX_SERVER_IP:-}"
+WG_PORT="${UNTRACX_WG_PORT:-51820}"
+BACKUP_FILE="/run/untracx/nftables-backup.nft"
 
 log() {
   printf '[untracx-killswitch] %s\n' "$*"
@@ -14,64 +17,52 @@ die() {
   exit 1
 }
 
-[[ $EUID -eq 0 ]] || die "root olarak calistirin"
-
-# SECURITY: Validate environment variables to prevent nftables command injection
+[[ $EUID -eq 0 ]] || die "root olarak calistirin (sudo)"
 [[ "$WG_IFACE" =~ ^[A-Za-z0-9_=+.-]{1,15}$ ]] || die "gecersiz WG_IFACE: $WG_IFACE"
-[[ "$WG_SUBNET" =~ ^[0-9./]+$ ]] || die "gecersiz WG_SUBNET: $WG_SUBNET"
-
-detect_out_iface() {
-  OUT_IFACE="$(ip -4 route show default | awk 'NR == 1 { print $5 }')"
-  [[ -n "$OUT_IFACE" ]] || die "varsayilan dis arayuz bulunamadi"
-}
 
 ac() {
-  detect_out_iface
-  log "Kill-switch aciliyor (nftables, IPv4 + IPv6)..."
+  log "Kill-switch etkinlestiriliyor (nftables inet fail-closed output)..."
+  mkdir -p /run/untracx
 
-  # IPv4: tünelden gelen harici trafik disinda FORWARD kapali.
-  nft add table ip untracx 2>/dev/null || true
-  nft add chain ip untracx forward '{ type filter hook forward priority 0; policy drop; }' 2>/dev/null || true
-  nft add chain ip untracx output '{ type filter hook output priority 0; policy accept; }' 2>/dev/null || true
+  if [[ ! -f "$BACKUP_FILE" ]]; then
+    nft list ruleset > "$BACKUP_FILE" 2>/dev/null || true
+  fi
 
-  nft add rule ip untracx forward iifname "$WG_IFACE" oifname "$OUT_IFACE" ip saddr "$WG_SUBNET" accept
-  nft add rule ip untracx forward iifname "$OUT_IFACE" oifname "$WG_IFACE" ip daddr "$WG_SUBNET" ct state established,related accept
-  nft add rule ip untracx output oifname "$WG_IFACE" accept
+  nft -f - <<TABLE_CONF
+table inet untracx_killswitch {
+    chain output {
+        type filter hook output priority 0; policy drop;
+        oifname "lo" accept
+        oifname "$WG_IFACE" accept
+        ct state established,related accept
+        udp sport 68 udp dport 67 accept
+        udp sport 546 udp dport 547 accept
+        ip protocol icmp accept
+        ip6 nexthdr icmpv6 accept
+    }
+}
+TABLE_CONF
 
-  nft add rule ip untracx forward iifname "$WG_IFACE" oifname "$WG_IFACE" accept
-  nft add rule ip untracx forward iifname lo oifname lo accept
+  if [[ -n "$SERVER_IP" && "$SERVER_IP" =~ ^[0-9.]+$ ]]; then
+    nft add rule inet untracx_killswitch output ip daddr "$SERVER_IP" udp dport "$WG_PORT" accept
+  fi
 
-  # IPv6: istemci AllowedIPs icinde ::/0 var; sizintiyi onlemek icin ayni
-  # mantik ip6 family'sinda da kurulur (subnet IPv4 oldugu icin yalniz arayuz bazli).
-  nft add table ip6 untracx 2>/dev/null || true
-  nft add chain ip6 untracx forward '{ type filter hook forward priority 0; policy drop; }' 2>/dev/null || true
-  nft add chain ip6 untracx output '{ type filter hook output priority 0; policy accept; }' 2>/dev/null || true
-
-  nft add rule ip6 untracx forward iifname "$WG_IFACE" oifname "$OUT_IFACE" accept
-  nft add rule ip6 untracx forward iifname "$OUT_IFACE" oifname "$WG_IFACE" ct state established,related accept
-  nft add rule ip6 untracx output oifname "$WG_IFACE" accept
-
-  nft add rule ip6 untracx forward iifname "$WG_IFACE" oifname "$WG_IFACE" accept
-  nft add rule ip6 untracx forward iifname lo oifname lo accept
-
-  log "Kill-switch aktif (v4+v6): WG_IFACE=$WG_IFACE OUT_IFACE=$OUT_IFACE"
+  log "Kill-switch AKTIF: Tum fiziksel cikis trafigi bloke edildi (yalniz $WG_IFACE acik)."
 }
 
 kapat() {
-  log "Kill-switch kapatiliyor (nftables)..."
-  nft delete table ip untracx 2>/dev/null || true
-  nft delete table ip6 untracx 2>/dev/null || true
-  log "Kill-switch kaldirildi; tum trafic normal yoldan gidecek."
+  log "Kill-switch devre disi birakiliyor..."
+  nft delete table inet untracx_killswitch 2>/dev/null || true
+  rm -f "$BACKUP_FILE"
+  log "Kill-switch KAPALI: Normal ag akisi saglandi."
 }
 
 durum() {
-  if nft list table ip untracx > /dev/null 2>&1 || nft list table ip6 untracx > /dev/null 2>&1; then
-    echo "Kill-switch ACIK:"
-    nft list table ip untracx 2>/dev/null
-    echo "---"
-    nft list table ip6 untracx 2>/dev/null
+  if nft list table inet untracx_killswitch > /dev/null 2>&1; then
+    echo "Kill-switch DURUM: AKTIF (Arayuz: $WG_IFACE)"
+    nft list table inet untracx_killswitch
   else
-    echo "Kill-switch KAPALI"
+    echo "Kill-switch DURUM: KAPALI"
   fi
 }
 

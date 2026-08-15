@@ -32,5 +32,8 @@ describe('ConnectionPanel', () => {
         configPath: '/etc/wireguard/wg0.conf',
       });
     });
+    await waitFor(() => {
+      expect(screen.getByText('VPN bağlantısı kuruldu.')).toBeInTheDocument();
+    });
   });
 });

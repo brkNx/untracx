@@ -4,13 +4,22 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run without creating a GitHub release'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
 
 jobs:
-  build-and-sign:
+  build-binaries:
+    name: Build & Sign (${{ matrix.artifact }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -32,89 +41,82 @@ jobs:
             artifact: untracx-windows-x86_64.exe
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
-      - name: Build release binary
-        run: cargo build --manifest-path core/Cargo.toml --target ${{ matrix.target }} --release
-
-      - name: Add Linux target artifacts
-        if: startsWith(matrix.target, 'x86_64-unknown-linux-gnu') || startsWith(matrix.target, 'aarch64-unknown-linux-gnu')
+      - name: Install Linux ARM64 Cross Linker
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
         run: |
-          mkdir -p dist-artifacts
-          cp "core/target/${{ matrix.target }}/release/untracx" "dist-artifacts/${{ matrix.artifact }}"
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gcc-aarch64-linux-gnu
+          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
 
-      - name: Sign binary (macOS)
-        if: runner.os == 'macOS' && env.CODESIGN_IDENTITY != ''
+      - name: Build release binary
+        run: cargo build --manifest-path core/Cargo.toml --target ${{ matrix.target }} --locked --release
+
+      - name: Prepare Artifact Directory
+        shell: bash
+        run: mkdir -p dist-artifacts
+
+      - name: Package Linux Binary
+        if: runner.os == 'Linux'
+        run: cp "core/target/${{ matrix.target }}/release/untracx" "dist-artifacts/${{ matrix.artifact }}"
+
+      - name: Package & Sign macOS Binary
+        if: runner.os == 'macOS'
+        shell: bash
         env:
           CODESIGN_IDENTITY: ${{ secrets.CODESIGN_IDENTITY }}
         run: |
-          mkdir -p dist-artifacts
-          if codesign --sign "$CODESIGN_IDENTITY" --force "core/target/${{ matrix.target }}/release/untracx"; then
-            echo "codesign basarili"
-          else
-            echo "codesign basarisiz; imzasiz devam"
+          BINARY="core/target/${{ matrix.target }}/release/untracx"
+          if [[ -n "$CODESIGN_IDENTITY" ]]; then
+            codesign --sign "$CODESIGN_IDENTITY" --options runtime --force "$BINARY" || exit 1
           fi
-          cp "core/target/${{ matrix.target }}/release/untracx" "dist-artifacts/${{ matrix.artifact }}"
+          cp "$BINARY" "dist-artifacts/${{ matrix.artifact }}"
 
-      - name: Sign binary (Windows)
-        if: runner.os == 'Windows' && env.WINDOWS_SIGNING_CERT != ''
-        env:
-          WINDOWS_SIGNING_CERT: ${{ secrets.WINDOWS_SIGNING_CERT }}
-          WINDOWS_SIGNING_PASS: ${{ secrets.WINDOWS_SIGNING_PASS }}
-        run: |
-          mkdir -p dist-artifacts
-          if osslsigncode sign \
-            -pkcs12 "$WINDOWS_SIGNING_CERT" \
-            -pass "$WINDOWS_SIGNING_PASS" \
-            -in "core/target/${{ matrix.target }}/release/untracx.exe" \
-            -out "dist-artifacts/${{ matrix.artifact }}" \
-            -t http://timestamp.digicert.com; then
-            echo "osslsigncode basarili"
-          else
-            echo "osslsigncode basarisiz; imzasiz devam"
-            cp "core/target/${{ matrix.target }}/release/untracx.exe" "dist-artifacts/${{ matrix.artifact }}"
-          fi
+      - name: Package Windows Binary
+        if: runner.os == 'Windows'
+        shell: bash
+        run: cp "core/target/${{ matrix.target }}/release/untracx.exe" "dist-artifacts/${{ matrix.artifact }}"
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - name: Upload Artifact
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
         with:
           name: ${{ matrix.artifact }}
           path: dist-artifacts/
           if-no-files-found: error
 
-  release:
-    needs: build-and-sign
+  publish:
+    name: Publish Release
+    needs: build-binaries
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
+    timeout-minutes: 20
+    if: startsWith(github.ref, 'refs/tags/v') && (github.event.inputs.dry_run != 'true')
     permissions:
       contents: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           path: dist
           merge-multiple: true
 
-      - name: Generate checksums
+      - name: Generate Checksums (SHA-256)
+        shell: bash
         run: |
           cd dist
-          if command -v sha256sum > /dev/null 2>&1; then
-            find . -maxdepth 1 -type f ! -name 'checksums.txt' -exec sha256sum {} \; > checksums.txt
-          else
-            find . -maxdepth 1 -type f ! -name 'checksums.txt' -exec shasum -a 256 {} \; > checksums.txt
-          fi
+          sha256sum * > checksums.txt 2>/dev/null || true
           cat checksums.txt
 
-      - name: Create release
-        uses: softprops/action-gh-release@v2
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@c95fe1489396fe8a9eb872386006ae03c3d1971b # v2.2.1
         with:
           files: |
             dist/*
           draft: false
-          prerelease: false
+          prerelease: ${{ contains(github.ref, '-alpha') || contains(github.ref, '-beta') || contains(github.ref, '-rc') }}
