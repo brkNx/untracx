@@ -1,67 +1,72 @@
-# Mimari
+# Mimari ve Tasarım İlkeleri
 
-## Aşama 1: çalışan MVP
+Untracx, kişisel kullanım için yüksek güvenlikli, doğrulanabilir ve sürdürülebilir bir WireGuard VPN ürünüdür.
 
-```text
-WireGuard istemcisi
-  -> UDP 51820
-Ubuntu 24.04 VM
-  -> kernel WireGuard (wg0: 10.66.66.1/24)
-  -> UFW + dar kapsamlı forwarding/NAT
-  -> OCI public network interface
-  -> Internet
+---
 
-VPN istemcisi -> 10.66.66.1:53 -> Unbound recursive DNS
-```
-
-Sunucu x86_64 ve arm64 üzerinde aynı Ubuntu paketlerini kullanır. Dış ağ arayüzü default route üzerinden bulunur; `eth0` sabitlenmez.
-
-## Aşama 2+: masaüstü istemcisi
+## 1. Ağ ve Sunucu Mimarisi (Server Core)
 
 ```text
-React GUI (normal kullanıcı)
-  -> Tauri/Rust uygulaması
-  -> kimliği doğrulanmış yerel IPC
-  -> küçük, ayrıcalıklı helper
-  -> işletim sisteminin WireGuard backend'i
-  -> platform firewall + DNS yönetimi
+┌────────────────────────────────────────────────────────┐
+│                   İstemci Cihazı                      │
+│ (Resmi WireGuard İstemcisi / iOS / Android / Desktop) │
+└──────────────────────────┬─────────────────────────────┘
+                           │ WireGuard (UDP 51820)
+                           ▼
+┌────────────────────────────────────────────────────────┐
+│          Ubuntu 22.04 / 24.04 Sunucu (OCI / VPS)       │
+│                                                        │
+│  Kernel WireGuard (wg0: 10.66.66.1/24)                │
+│  ├── UFW Firewall (Fail-Closed Default Deny)          │
+│  │   ├── Ingress: UDP 51820 (Tüm IP'ler)              │
+│  │   ├── Ingress: TCP 22 (Yönetim IP /32)             │
+│  │   └── In-Tunnel: TCP/UDP 53 (Yalnızca wg0 -> IP)   │
+│  ├── Unbound DNS Resolver (10.66.66.1:53)              │
+│  │   └── QNAME Minimisation + DNSSEC Validating       │
+│  └── Egress: iptables NAT Masquerade -> Internet       │
+└────────────────────────────────────────────────────────┘
 ```
 
-GUI hiçbir platformda root/Admin olarak çalıştırılmayacaktır. Helper yalnız önceden tanımlı profil ve ağ işlemlerini kabul edecek; serbest komut veya serbest dosya yolu çalıştırmayacaktır.
+- **Ağ İzolasyonu**: Sunucu DNS resolver'ı genel internete kapalıdır (`0.0.0.0/0 refuse`), yalnızca `10.66.66.0/24` WireGuard arayüzünden gelen sorguları kabul eder.
+- **Dinamik Ağ Tespiti**: Kurulum scripti (`setup.sh`) varsayılan rotadaki çıkış arayüzünü (`ip route show default`) otomatik tespit eder (`eth0` varsayımı yapmaz).
+- **Yeniden Üretilebilirlik**: Kurulum idempotendir; tekrar çalıştırıldığında mevcut sunucu özel anahtarını ve kayıtlı peer'ları ezmez.
 
-## Güven sınırları
+---
 
-| Sınır | Güven kararı |
-|---|---|
-| GUI -> helper | Karşı uç kimliği ve mesaj şeması doğrulanmalı |
-| Client config | 0600/OS key store; loglarda secret yok |
-| VPS | Sunucu private key yalnız `/etc/wireguard`, root 0600 |
-| Peer yaşam döngüsü | Her cihaz ayrı key + PSK; kayıp cihaz tek başına iptal edilir |
-| DNS | Yalnız `10.66.66.0/24` erişebilir; public 53 kapalıdır |
-| Güncelleme | İmzalı uygulama güncellemesi olmadan otomatik update yok |
+## 2. Peer ve Provizyon Modeli (Zero-Trust)
 
-## Platform matrisi
+Untracx iki ayrı provizyon akışını destekler:
 
-| Platform | Tünel backend'i | Ayrıcalık modeli | Kill-switch hedefi |
-|---|---|---|---|
-| Windows | WireGuardNT / resmi WireGuard service | Windows service + named pipe ACL | Windows Filtering Platform |
-| macOS | Network Extension veya resmi WireGuard entegrasyonu | imzalı helper/entitlement | Network Extension kuralları |
-| Linux | kernel WireGuard + wg-quick | polkit + systemd helper | nftables/iptables policy |
+1. **Zero-Trust İstemci Provizyonu (Önerilen)**:
+   - İstemci özel anahtarı (`PrivateKey`) yalnızca istemcinin yerel cihazında üretilir.
+   - Sunucuya yalnızca istemci genel anahtarı (`PublicKey`) ve ortak `PresharedKey` iletilir:
+     `sudo untracx-add-peer <cihaz> <client-public-key> [preshared-key]`
+   - Sunucuda hiçbir zaman istemci özel anahtarı barındırılmaz.
+2. **Sunucu Taraflı Provizyon (Hızlı Başlangıç)**:
+   - Sunucu istemci anahtarını ve konfigürasyonunu `~/untracx-<cihaz>.conf` olarak `0600` izinleriyle oluşturur.
+   - İstemci dosyayı çektikten sonra sunucu kopyasını siler.
 
-Platform backend'i seçimi uygulama koduna başlanmadan küçük PoC'lerle doğrulanacaktır. `wireguard-go` tüm platformlarda aynı şekilde paketlenecek varsayımı yapılmamıştır.
+---
 
-## Ağ kararları
+## 3. Veri ve Dosya Bütünlüğü (Atomik Transactions)
 
-- İlk sürüm IPv4 internet çıkışı sağlar.
-- İstemci profili `::/0` rotasını tünele yollar; sunucu IPv6 çıkışı sağlamadığı için aktif tünelde IPv6 interneti çalışmayabilir.
-- Tünel düştüğünde leak engellemek yalnız rota ayarıyla garanti edilmez; platform firewall'ı gereklidir.
-- Varsayılan MTU 1420'dir; mobil ağ testlerinde gerekirse düşürülecektir.
-- `PersistentKeepalive = 25` yalnız istemci tarafında kullanılır.
+- **Atomik Peer Silme**: `server/remove-peer.sh`, `[Peer]` sınırlarını ve hedef genel anahtarı eşleyen deterministik ayrıştırıcı kullanır. Araya eklenmiş manuel peer'ları veya diğer istemcileri kesinlikle silmez.
+- **Atomik Peer Ekleme**: `server/add-peer.sh`, sunucu konfigürasyonu, metadata ve canlı `wg syncconf` adımlarını tek bir transaction olarak yürütür. Herhangi bir aşamada kesinti veya sinyal gelirse geri alma (rollback) tetiklenir.
+- **Güvenli Dosya Yazımı**: Core ve GUI katmanlarında özel anahtar içeren dosyalar `fs_util::write_secret_file_atomic` ile `0600`, `O_NOFOLLOW`, `create_new`, `fsync` ve atomik rename ile yazılır.
 
-## Değiştirilmeyecek güvenlik ilkeleri
+---
 
-- Private key veya PSK stdout/log/telemetry'ye yazılmaz.
-- GUI root/Admin çalıştırılmaz.
-- Sunucu bootstrap mevcut peer config'ini sessizce ezmez.
-- Kayıp cihaz için tüm sunucuyu yeniden kurmak yerine tek peer iptal edilir.
-- “Bağlandı” göstergesi yalnız process durumuna değil, güncel handshake ve egress testine dayanır.
+## 4. Masaüstü ve İstemci Mimarisi (v1 GUI)
+
+- **Tauri 2 + React**: Masaüstü arayüzü normal kullanıcı yetkisinde çalışır.
+- **Bellek Temizliği**: Özel anahtar ve PSK verileri `Zeroize` trait'i ile bellekten anında silinir.
+- **Resmi İstemci Entegrasyonu**: v1'de güvensiz sahte wrapper veya root IPC helper'ları yerine, standart `.conf` ve QR kod ile resmi WireGuard istemcilerine güvenli aktarım esastır.
+
+---
+
+## 5. Değiştirilmeyecek Güvenlik Prensipleri
+
+1. Özel anahtar ve PSK hiçbir zaman stdout'a, loglara veya terminal çıktılarına yazılmaz.
+2. GUI asla root/Admin yetkisiyle başlatılmaz.
+3. Kanıtlanmamış veya sahte güvenlik özellikleri arayüzde varmış gibi gösterilmez.
+4. Kayıp bir cihaz için tüm sunucu yeniden kurulmaz; yalnızca ilgili peer iptal edilir.

@@ -1,55 +1,61 @@
-# Oracle Cloud kontrol listesi
+# Oracle Cloud (OCI) Kurulum ve Sorun Giderme Rehberi
 
-## Ücretsiz kaynak doğrulaması
+---
 
-Oracle Console'da instance ve boot volume için **Always Free-eligible** etiketini doğrulayın. Ücretsiz sınırlar zamanla değişebilir; billing budget ve düşük eşikli alarm açın.
+## 1. Always Free Kaynak Uygunluğu
 
-Resmi kaynaklar:
+Oracle Cloud Infrastructure (OCI) Always Free katmanında ücretsiz kaynaklar şunlardır:
+- **x86_64**: `VM.Standard.E2.1.Micro` (1 OCPU, 1 GB RAM).
+- **Arm (Ampere)**: `VM.Standard.A1.Flex` (4 OCPU'ya ve 24 GB RAM'e kadar ücretsiz).
+- **Boot Volume**: 200 GB'a kadar toplam blok depolama.
 
-- <https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier.htm>
-- <https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm>
+> **Önemli**: OCI Console üzerinde kaynak oluştururken **"Always Free Eligible"** rozetini mutlaka doğrulayın. Bütçe aşımını önlemek için *Billing & Cost Management* menüsünden bütçe ve e-posta alarmı kurmanız şiddetle önerilir.
 
-## Ağ
+---
 
-OCI iki ayrı firewall katmanına sahiptir:
+## 2. OCI Ağ Güvenlik Kuralları (Ingress / Egress)
 
-1. VCN üzerindeki Network Security Group veya subnet Security List
-2. VM içindeki UFW/iptables
+OCI sanal bulut ağlarında iki kademeli güvenlik mekanizması bulunur:
+1. **VCN Security List / Network Security Group (NSG)**: OCI bulut katmanı.
+2. **UFW / iptables**: Ubuntu VM içi işletim sistemi güvenlik duvarı.
 
-İkisinin de trafiğe izin vermesi gerekir. Oracle, instance bazlı kurallar için NSG kullanımını önerir.
+### Gerekli Ingress Kuralları:
 
-Önerilen ingress:
+| Protokol | Port | Kaynak (Source CIDR) | Açıklama |
+|---|---|---|---|
+| **TCP** | `22` | Kendi Statik IP'niz `/32` | SSH erişimi (mümkünse 0.0.0.0/0 açmayın). |
+| **UDP** | `51820` | `0.0.0.0/0` | WireGuard tünel ingress portu. |
 
-| Protokol | Destination port | Source CIDR | Not |
-|---|---:|---|---|
-| TCP | 22 | Yönetim yaptığınız public IP `/32` | SSH; mümkünse dünyaya açmayın |
-| UDP | 51820 | `0.0.0.0/0` | Mobil/seyahat istemcileri değişken IP kullanır |
+> **UYARI**: Port 53 (DNS) için OCI Security List'e **kesinlikle genel internet ingress kuralı eklemeyin**. Unbound yalnızca WireGuard tünel arayüzü (`10.66.66.1`) üzerinden hizmet verir.
 
-Egress varsayılan olarak açık kalabilir. DNS portu 53 için public ingress eklemeyin.
+---
 
-Resmi ağ referansı: <https://docs.oracle.com/en-us/iaas/tools/oci-cli/latest/oci_cli_docs/cmdref/network/security-list.html>
+## 3. SSH Bağlantı ve Zaman Aşımı Sorunları
 
-## SSH zaman aşımı teşhisi
+Eğer `ssh: connect to host ... port 22: Operation timed out` hatası alıyorsanız:
 
-`ssh: connect to host ... port 22: Operation timed out` hatası anahtar doğrulamasından önce oluşur. Sırayla kontrol edin:
+1. **Instance Durumu**: OCI Console'da instance'ın `RUNNING` durumunda olduğunu teyit edin.
+2. **Public IP**: Instance'a bağlı VNIC üzerinde Public IPv4 adresi atandığından emin olun.
+3. **Security List**: İlgili subnet'in Security List veya NSG kurallarında TCP 22 ingress izni olduğunu kontrol edin.
+4. **OCI Virtual Router / IGW**: VCN Route Table içinde `0.0.0.0/0` rotasının Internet Gateway'e (IGW) yönlendirildiğini doğrulayın.
+5. **Console Connection**: SSH tamamen kilitlendiyse OCI Console'dan *Console Connection / Cloud Shell* başlatarak serial bağlantı ile erişim sağlayabilirsiniz.
 
-1. Instance `RUNNING` durumda mı?
-2. Public IP doğru VNIC üzerinde mi?
-3. NSG/Security List TCP 22 ingress içeriyor mu?
-4. Source CIDR mevcut bağlantınızın public IP'sini kapsıyor mu?
-5. VM içindeki UFW/iptables TCP 22'yi kabul ediyor mu?
-6. Farklı bir SSH portu seçildiyse `SSH_PORT` ve OCI kuralı aynı mı?
+---
 
-Mümkünse kalıcı `0.0.0.0/0:22` yerine kendi IP'nizi `/32` kullanın. IP'niz değişirse kuralı güncellemeniz gerekir.
+## 4. Kurulum Sonrası Servis Sağlık Denetimi
 
-## WireGuard kurulumu sonrası
-
-OCI Console'da UDP 51820 kuralını ekledikten sonra sunucuda:
+Sunucuda kurulum yapıldıktan sonra servisleri doğrulayın:
 
 ```bash
+# WireGuard servis durumu
+sudo systemctl status wg-quick@wg0 --no-pager
+
+# Dinleyen UDP portları
 sudo ss -lunp | grep 51820
-sudo wg show wg0
+
+# DNS resolver durumu
+sudo systemctl status unbound --no-pager
+
+# UFW kuralları
 sudo ufw status verbose
 ```
-
-İstemciden handshake oluşmuyorsa önce OCI kuralını ve public endpoint'i kontrol edin; handshake var ama internet yoksa forwarding/NAT ve DNS durumuna bakın.

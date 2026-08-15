@@ -1,4 +1,4 @@
-.PHONY: all build build-cli build-gui dev-gui test test-core test-gui lint lint-gui clean check install
+.PHONY: all build build-cli build-gui dev-gui test test-core test-gui lint lint-gui clean check release
 SHELL := /bin/bash
 .DELETE_ON_ERROR:
 
@@ -7,11 +7,11 @@ all: build
 build: build-cli build-gui
 
 build-cli:
-	cargo build --manifest-path core/Cargo.toml --release
+	cargo build --manifest-path core/Cargo.toml --locked --release
 
 build-gui:
 	cd gui/frontend && npm ci && npm run build
-	cargo build --manifest-path gui/Cargo.toml --release
+	cargo build --manifest-path gui/Cargo.toml --locked --release
 
 dev-gui:
 	cd gui/frontend && npm run dev
@@ -31,11 +31,6 @@ lint-gui:
 
 check:
 	./scripts/check.sh
-
-install:
-	cd gui/frontend && npm ci
-	cargo build --manifest-path core/Cargo.toml --release
-	cargo build --manifest-path gui/Cargo.toml --release
 
 clean:
 	cargo clean --manifest-path core/Cargo.toml
