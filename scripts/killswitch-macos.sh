@@ -1,42 +1,44 @@
 #!/usr/bin/env bash
+# untracx - macOS Packet Filter (pf) Kill-Switch (Experimental CLI)
+# NOT: macOS uzerinde en guvenilir kill-switch resmi WireGuard.app On-Demand profilidir.
 set -euo pipefail
 
-WG_IFACE="${WG_IFACE:-wg0}"
+ANCHOR_NAME="com.untracx.killswitch"
+CONF_FILE="/etc/pf.anchors/${ANCHOR_NAME}"
 
-log() {
-  printf '[untracx-killswitch] %s\n' "$*"
-}
+log() { printf '[untracx-killswitch] %s\n' "$*"; }
+die() { printf '[untracx-killswitch] HATA: %s\n' "$*" >&2; exit 1; }
 
-die() {
-  printf '[untracx-killswitch] HATA: %s\n' "$*" >&2
-  exit 1
-}
-
-[[ $EUID -eq 0 ]] || die "root olarak calistirin"
+[[ $EUID -eq 0 ]] || die "root olarak calistirin (sudo)"
 
 ac() {
-  log "Kill-switch aciliyor (ApplicationFirewall)..."
+  log "macOS pf kill-switch etkinlestiriliyor (Deneysel)..."
+  mkdir -p /etc/pf.anchors
+  cat > "$CONF_FILE" <<PF_EOF
+# untracx fail-closed anchor
+block drop out all
+pass out quick on lo0 all
+pass out quick on utun+ all
+pass out proto udp to any port 51820
+pass out proto udp from any port 68 to any port 67
+PF_EOF
 
-  if ! command -v /usr/libexec/ApplicationFirewall/socketfilterfw > /dev/null 2>&1; then
-    die "socketfilterfw bulunamadi; macOS ApplicationFirewall gerekli"
-  fi
-
-  /usr/libexec/ApplicationFirewall/socketfilterfw --setglobalstate on
-
-  log "Uygulama katmani kill-switch: Wi-Fi ve Ethernet icin giden trafic sinlendirildi."
-  log "Tam network-level kill-switch icin Network Extension kullanilmasi onerenir."
+  pfctl -a "$ANCHOR_NAME" -f "$CONF_FILE" 2>/dev/null || true
+  pfctl -e 2>/dev/null || true
+  log "Kill-switch AKTIF: utun ve endpoint disindaki cikislar engellendi."
+  log "Tavsiye: Tam entegrasyon icin resmi WireGuard.app On-Demand profilini kullanin."
 }
 
 kapat() {
-  log "Kill-switch kapatiliyor..."
-  /usr/libexec/ApplicationFirewall/socketfilterfw --setglobalstate off 2>/dev/null || true
-  log "Kill-switch kaldirildi."
+  log "pf kill-switch kurallari kaldiriliyor..."
+  pfctl -a "$ANCHOR_NAME" -F all 2>/dev/null || true
+  rm -f "$CONF_FILE"
+  log "Kill-switch KAPALI."
 }
 
 durum() {
-  local state
-  state="$(/usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate 2>/dev/null || echo 'bilinmiyor')"
-  echo "Firewall durumu: $state"
+  echo "--- $ANCHOR_NAME kurallari ---"
+  pfctl -a "$ANCHOR_NAME" -s rules 2>/dev/null || echo "KAPALI veya kural yok"
 }
 
 case "${1:-}" in

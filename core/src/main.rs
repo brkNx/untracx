@@ -1,8 +1,7 @@
 use clap::{Parser, Subcommand};
-use std::fs;
 use std::io::{self, Read as _};
 use std::path::Path;
-use untracx::{config, helper, keys, wireguard};
+use untracx::{config, fs_util, helper, keys, wireguard};
 use zeroize::Zeroize;
 
 #[derive(Parser)]
@@ -20,6 +19,8 @@ struct Cli {
 enum Commands {
     /// Yeni istemci anahtar çifti üret (base64). Özel anahtar stdout'a yazılmaz.
     Keygen,
+    /// Yeni pre-shared key üret (32 bayt base64).
+    Genpsk,
     /// Özel anahtardan genel anahtar türet (stdin'den okur)
     Pubkey,
     /// İstemci WireGuard config dosyası üret (stdin'den private key okur)
@@ -37,6 +38,8 @@ enum Commands {
         mtu: u16,
         #[arg(long, default_value_t = 51820)]
         port: u16,
+        #[arg(long)]
+        preshared_key: Option<String>,
         #[arg(short, long, default_value = "client.conf")]
         output: String,
     },
@@ -57,6 +60,8 @@ enum Commands {
         mtu: u16,
         #[arg(long, default_value_t = 51820)]
         port: u16,
+        #[arg(long)]
+        preshared_key: Option<String>,
         #[arg(short, long, default_value = "stdin.conf")]
         output: String,
     },
@@ -74,7 +79,7 @@ enum Commands {
 
 #[derive(Subcommand)]
 enum HelperAction {
-    /// Helper servisini başlat (systemd user service)
+    /// Helper servisini başlat
     Start,
     /// Helper servisini durdur
     Stop,
@@ -107,6 +112,10 @@ fn run(cli: Cli) -> Result<(), String> {
             eprintln!("Özel anahtar stdout'a yazılmadı; güvenli şekilde kaydedin.");
             println!("{}", kp.public());
         }
+        Commands::Genpsk => {
+            let psk = keys::generate_psk();
+            println!("{psk}");
+        }
         Commands::Pubkey => {
             let mut private_b64 = String::new();
             io::stdin()
@@ -121,7 +130,7 @@ fn run(cli: Cli) -> Result<(), String> {
             let result = keys::public_from_private(trimmed);
             private_b64.zeroize();
             let pubkey = result?;
-            println!("{}", pubkey);
+            println!("{pubkey}");
         }
         Commands::GenConfig {
             server_public,
@@ -130,6 +139,7 @@ fn run(cli: Cli) -> Result<(), String> {
             dns,
             mtu,
             port,
+            preshared_key,
             output,
         } => {
             let mut private_b64 = String::new();
@@ -142,7 +152,6 @@ fn run(cli: Cli) -> Result<(), String> {
                 private_b64.zeroize();
                 return Err("stdin boş; özel anahtarı pipe ile gönderin".into());
             }
-            // SECURITY: validate_private returns decoded bytes — zeroize immediately
             {
                 let mut raw = keys::validate_private(trimmed)?;
                 raw.zeroize();
@@ -155,14 +164,14 @@ fn run(cli: Cli) -> Result<(), String> {
                 dns: &dns,
                 mtu,
                 port,
+                preshared_key: preshared_key.as_deref(),
             };
             let result = config::render(&cfg);
             private_b64.zeroize();
-            let rendered = result?;
+            let mut rendered = result?;
             validate_output_path(&output)?;
-            fs::write(&output, rendered).map_err(|e| e.to_string())?;
-            set_perms_600(&output);
-            println!("✓ {output} yazıldı");
+            fs_util::write_secret_file_atomic(Path::new(&output), &mut rendered)?;
+            println!("✓ {output} yazıldı (0600)");
             println!("Bağlanmak için: sudo untracx connect {output}");
         }
         Commands::Connect { config } => {
@@ -176,6 +185,7 @@ fn run(cli: Cli) -> Result<(), String> {
             dns,
             mtu,
             port,
+            preshared_key,
             output,
         } => {
             let mut private_key = read_private_key_from_stdin()?;
@@ -187,13 +197,13 @@ fn run(cli: Cli) -> Result<(), String> {
                 dns: &dns,
                 mtu,
                 port,
+                preshared_key: preshared_key.as_deref(),
             };
-            let rendered = config::render(&cfg)?;
-            validate_output_path(&output)?;
-            fs::write(&output, rendered).map_err(|e| e.to_string())?;
-            set_perms_600(&output);
+            let mut rendered = config::render(&cfg)?;
             private_key.zeroize();
-            println!("✓ {output} yazıldı (stdin'den okunan private key kullanıldı)");
+            validate_output_path(&output)?;
+            fs_util::write_secret_file_atomic(Path::new(&output), &mut rendered)?;
+            println!("✓ {output} yazıldı (0600, stdin'den okunan private key kullanıldı)");
             println!("Bağlanmak için: sudo untracx connect {output}");
         }
         Commands::Down { config } => {
@@ -208,7 +218,6 @@ fn run(cli: Cli) -> Result<(), String> {
 
 fn read_private_key_from_stdin() -> Result<String, String> {
     let mut buf = String::new();
-    // SECURITY: Limit stdin read to 64 KiB to prevent OOM from malicious/accidental input
     io::stdin()
         .take(65536)
         .read_to_string(&mut buf)
@@ -261,19 +270,4 @@ fn validate_output_path(path: &str) -> Result<(), String> {
         }
     }
     Ok(())
-}
-
-fn set_perms_600(path: &str) {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        if let Err(e) = fs::set_permissions(Path::new(path), fs::Permissions::from_mode(0o600)) {
-            eprintln!("UYARI: {path} izinleri ayarlanamadı (0600): {e}");
-            eprintln!("UYARI: Özel anahtar içeren dosya başkaları tarafından okunabilir olabilir.");
-        }
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = path;
-    }
 }

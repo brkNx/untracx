@@ -206,6 +206,10 @@ ufw default deny routed > /dev/null
 ufw allow "${SSH_PORT}/tcp" comment 'untracx SSH' > /dev/null
 ufw allow "${WG_PORT}/udp" comment 'untracx WireGuard' > /dev/null
 ufw route allow in on "$WG_IFACE" out on "$OUT_IFACE" from "$WG_SUBNET" comment 'untracx VPN egress' > /dev/null
+if [[ "$WG_DNS" == "$WG_SERVER_IP" ]]; then
+  ufw allow in on "$WG_IFACE" to "$WG_SERVER_IP" port 53 proto udp comment 'untracx DNS UDP' > /dev/null
+  ufw allow in on "$WG_IFACE" to "$WG_SERVER_IP" port 53 proto tcp comment 'untracx DNS TCP' > /dev/null
+fi
 ufw --force enable > /dev/null
 
 cat > /etc/fail2ban/jail.d/untracx-sshd.local <<EOF

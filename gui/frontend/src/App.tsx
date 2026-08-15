@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, KeyboardEvent } from 'react';
 import { helperStatus, vpnStatus } from './lib/helper';
 import ErrorBoundary from './components/ErrorBoundary';
 import StatusIndicator from './components/ui/StatusIndicator';
@@ -52,6 +52,17 @@ export default function App() {
     refreshVpn();
   }, [refreshHelper, refreshVpn]);
 
+  const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    const currentIndex = TABS.findIndex((t) => t.key === activeTab);
+    if (e.key === 'ArrowRight') {
+      const nextIndex = (currentIndex + 1) % TABS.length;
+      setActiveTab(TABS[nextIndex].key);
+    } else if (e.key === 'ArrowLeft') {
+      const prevIndex = (currentIndex - 1 + TABS.length) % TABS.length;
+      setActiveTab(TABS[prevIndex].key);
+    }
+  };
+
   return (
     <ErrorBoundary>
       <div className="app">
@@ -63,19 +74,29 @@ export default function App() {
           </div>
         </header>
 
-        <nav className="app__nav">
+        <div className="app__nav" role="tablist" aria-label="Ana Menü" onKeyDown={handleKeyDown}>
           {TABS.map((tab) => (
             <button
               key={tab.key}
-              className={activeTab === tab.key ? 'app__nav button--active' : 'app__nav'}
+              id={`tab-${tab.key}`}
+              role="tab"
+              aria-selected={activeTab === tab.key}
+              aria-controls={`panel-${tab.key}`}
+              tabIndex={activeTab === tab.key ? 0 : -1}
+              className={activeTab === tab.key ? 'button--active' : ''}
               onClick={() => setActiveTab(tab.key)}
             >
               {tab.label}
             </button>
           ))}
-        </nav>
+        </div>
 
-        <main className="app__main">
+        <main
+          className="app__main"
+          id={`panel-${activeTab}`}
+          role="tabpanel"
+          aria-labelledby={`tab-${activeTab}`}
+        >
           {activeTab === 'status' && <StatusPanel />}
           {activeTab === 'connection' && <ConnectionPanel onStatusChange={refreshAll} />}
           {activeTab === 'management' && <PeerManager />}
