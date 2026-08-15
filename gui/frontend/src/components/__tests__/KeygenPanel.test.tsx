@@ -17,7 +17,7 @@ beforeEach(() => {
 describe('KeygenPanel', () => {
   it('renders key generation controls', () => {
     render(<KeygenPanel />);
-    expect(screen.getByText('Anahtar Yönetimi')).toBeInTheDocument();
+    expect(screen.getByText(/Anahtar Yönetimi/)).toBeInTheDocument();
     expect(screen.getByText('Yeni Anahtar Çifti Üret')).toBeInTheDocument();
   });
 
@@ -37,9 +37,10 @@ describe('KeygenPanel', () => {
       expect(screen.getByText('test_generated_public_key==')).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByText('Kopyala'));
+    const copyButtons = screen.getAllByText('Kopyala');
+    fireEvent.click(copyButtons[0]);
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith('test_generated_public_key==');
-    expect(screen.getByText('Panoya kopyalandı.')).toBeInTheDocument();
+    expect(screen.getByText('Genel anahtar kopyalandı.')).toBeInTheDocument();
   });
 
   it('derives public key from private key and validates private key', async () => {
@@ -63,7 +64,7 @@ describe('KeygenPanel', () => {
         privateKey: 'private_key_xyz',
       });
       expect(screen.getByText('derived_public_key==')).toBeInTheDocument();
-      expect(screen.getByText('Genel anahtar türetildi.')).toBeInTheDocument();
+      expect(screen.getByText('Genel anahtar başarıyla türetildi.')).toBeInTheDocument();
     });
 
     const validateButtons = screen.getAllByRole('button', { name: 'Doğrula' });
@@ -72,7 +73,7 @@ describe('KeygenPanel', () => {
       expect(mockInvoke).toHaveBeenCalledWith('validate_private_key', {
         privateKey: 'private_key_xyz',
       });
-      expect(screen.getByText('Özel anahtar geçerli.')).toBeInTheDocument();
+      expect(screen.getByText('Özel anahtar geçerli (32-byte Curve25519).')).toBeInTheDocument();
     });
   });
 
@@ -90,7 +91,7 @@ describe('KeygenPanel', () => {
       expect(mockInvoke).toHaveBeenCalledWith('validate_public_key', {
         publicKey: 'public_key_abc',
       });
-      expect(screen.getByText('Genel anahtar geçerli.')).toBeInTheDocument();
+      expect(screen.getByText('Genel anahtar geçerli (32-byte Curve25519).')).toBeInTheDocument();
     });
   });
 });

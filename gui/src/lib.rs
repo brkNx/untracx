@@ -13,7 +13,7 @@ fn is_valid_iface_name(name: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '=' | '+' | '.'))
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 fn run_systemctl(args: &[&str]) -> Result<String, String> {
     let output = std::process::Command::new("systemctl")
         .args(args)
@@ -30,52 +30,70 @@ fn run_systemctl(args: &[&str]) -> Result<String, String> {
 
 #[tauri::command]
 fn helper_start() -> Result<String, String> {
-    #[cfg(unix)]
+    #[cfg(target_os = "linux")]
     {
         run_systemctl(&["--user", "start", "untracx-helper"])
             .map(|_| "Helper servisi başlatıldı".to_string())
     }
-    #[cfg(not(unix))]
+    #[cfg(not(target_os = "linux"))]
     {
-        Err("Helper servisi bu işletim sisteminde doğrudan desteklenmiyor".into())
+        Err("Helper servisi macOS/Windows üzerinde terminalden 'sudo untracx helper start' komutu ile başlatılmalıdır.".into())
     }
 }
 
 #[tauri::command]
 fn helper_stop() -> Result<String, String> {
-    #[cfg(unix)]
+    #[cfg(target_os = "linux")]
     {
         run_systemctl(&["--user", "stop", "untracx-helper"])
             .map(|_| "Helper servisi durduruldu".to_string())
     }
-    #[cfg(not(unix))]
+    #[cfg(not(target_os = "linux"))]
     {
-        Err("Helper servisi bu işletim sisteminde doğrudan desteklenmiyor".into())
+        let sock = helper::sock_path();
+        if sock.exists() {
+            std::fs::remove_file(&sock).map_err(|e| e.to_string())?;
+            Ok("Helper soketi kaldırıldı".to_string())
+        } else {
+            Ok("Helper servisi çalışmıyor".to_string())
+        }
     }
 }
 
 #[tauri::command]
 fn helper_status() -> Result<serde_json::Value, String> {
-    #[cfg(unix)]
+    let sock = helper::sock_path();
+    let sock_exists = sock.exists();
+    #[cfg(target_os = "linux")]
     {
         let active = run_systemctl(&["--user", "is-active", "untracx-helper"]).unwrap_or_default();
-        let running = active == "active";
-        let sock = helper::sock_path();
-        let sock_exists = sock.exists();
+        let running = active == "active" || sock_exists;
         Ok(serde_json::json!({
             "running": running,
             "socketExists": sock_exists,
             "socketPath": sock.display().to_string(),
             "systemctlStatus": active,
+            "platform": "linux",
         }))
     }
-    #[cfg(not(unix))]
+    #[cfg(target_os = "macos")]
     {
         Ok(serde_json::json!({
-            "running": false,
-            "socketExists": false,
-            "socketPath": "",
+            "running": sock_exists,
+            "socketExists": sock_exists,
+            "socketPath": sock.display().to_string(),
+            "systemctlStatus": if sock_exists { "active" } else { "inactive" },
+            "platform": "macos",
+        }))
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    {
+        Ok(serde_json::json!({
+            "running": sock_exists,
+            "socketExists": sock_exists,
+            "socketPath": sock.display().to_string(),
             "systemctlStatus": "unsupported",
+            "platform": "other",
         }))
     }
 }
@@ -97,7 +115,7 @@ fn vpn_status() -> Result<serde_json::Value, String> {
     helper::cmd_status()
 }
 
-// ── Peer yönetimi (Local preview / helper) ──
+// ── Peer yönetimi (Komut Üretici & Kılavuz) ──
 
 #[tauri::command]
 fn peer_list(iface: Option<String>) -> Result<serde_json::Value, String> {

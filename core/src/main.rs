@@ -17,8 +17,15 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Yeni istemci anahtar çifti üret (base64). Özel anahtar stdout'a yazılmaz.
-    Keygen,
+    /// Yeni istemci anahtar çifti üret (Curve25519 base64 private key çıktısı verir)
+    Keygen {
+        /// Genel ve özel anahtarları birlikte yazdır
+        #[arg(long)]
+        both: bool,
+        /// JSON formatında çıktı ver (privateKey, publicKey, presharedKey)
+        #[arg(long)]
+        json: bool,
+    },
     /// Yeni pre-shared key üret (32 bayt base64).
     Genpsk,
     /// Özel anahtardan genel anahtar türet (stdin'den okur)
@@ -107,10 +114,25 @@ fn main() {
 
 fn run(cli: Cli) -> Result<(), String> {
     match cli.command {
-        Commands::Keygen => {
+        Commands::Keygen { both, json } => {
             let kp = keys::generate();
-            eprintln!("Özel anahtar stdout'a yazılmadı; güvenli şekilde kaydedin.");
-            println!("{}", kp.public());
+            let psk = keys::generate_psk();
+            if json {
+                println!(
+                    "{}",
+                    serde_json::json!({
+                        "privateKey": kp.private(),
+                        "publicKey": kp.public(),
+                        "presharedKey": psk,
+                    })
+                );
+            } else if both {
+                println!("Private Key : {}", kp.private());
+                println!("Public Key  : {}", kp.public());
+                println!("Pre-shared  : {}", psk);
+            } else {
+                println!("{}", kp.private());
+            }
         }
         Commands::Genpsk => {
             let psk = keys::generate_psk();
