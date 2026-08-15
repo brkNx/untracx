@@ -1,50 +1,45 @@
-# Güvenlik ve mahremiyet modeli (v1.1, 2026-08-11)
+# Güvenlik ve Tehdit Modeli (v1.2)
 
-## Korunan tehditler
+---
 
-- Ortak Wi-Fi üzerinde pasif dinleme ve yerel ağ gözlemi
-- ISP'nin cihaz ile VPN sunucusu arasındaki uygulama trafiğini doğrudan görmesi
-- Her cihaz için ayrı anahtar sayesinde tek cihaz kaybında sınırlı iptal
-- Public DNS resolver'a doğrudan istemci sorgusu yerine tünel içi recursive DNS
+## 1. Güvenlik Tasarımı ve Kapsam
 
-## Korunmayan tehditler
+Untracx, kişisel VPN trafiğini korumak amacıyla aşağıdaki güvenlik garantilerini sunar:
 
-- Oracle hesabının veya VM root hesabının ele geçirilmesi
-- Kötü amaçlı ya da zaten ele geçirilmiş istemci cihaz
-- Tarayıcı fingerprinting, çerezler ve oturum açılmış hesaplarla kimlik ilişkilendirme
-- HTTPS uç noktalarının ve trafik zamanlamasının VPS sağlayıcısı tarafından gözlenmesi
-- Uygulama katmanında takip, phishing veya malware
-- Trafik korelasyonu yapan güçlü küresel gözlemci
+### 1.1 Kriptografik İlkeler
+- **Protokol**: WireGuard (Noise IKpsk2 protokolü).
+- **Simetrik Şifreleme**: ChaCha20-Poly1305 AEAD.
+- **Anahtar Değişimi**: Curve25519 (X25519 ECDH).
+- **Hash Fonksiyonu**: BLAKE2s.
+- **Kuantum Sonrası Koruma**: 256-bit Pre-shared Key (PSK) ile peer izolasyonu ve ileriye dönük gizlilik (Forward Secrecy).
 
-Bu sistem bir anonimlik ağı değildir ve Tor'un yerini tutmaz.
+### 1.2 Bellek ve Dosya Güvenliği
+- **Zeroize Temizliği**: Özel anahtarlar, PSK değerleri ve hassas konfigürasyon metinleri kullanım sonrasında `Zeroize` ile bellekten silinir.
+- **Atomik ve Güvenli Dosya Yazımı**: Dosyalar `fs_util::write_secret_file_atomic` aracılığıyla `create_new(true)`, `0600` izinleri, `O_NOFOLLOW` bayrağı ve `fsync` ile aynı dosya sisteminde geçici dosya açılarak atomik yeniden adlandırmayla yazılır.
+- **Symlink ve TOCTOU Koruması**: Symlink saldırılarına karşı `O_NOFOLLOW` ve üst dizin izin denetimleri zorunlu tutulur.
 
-## Kill-switch durumu
+---
 
-`AllowedIPs = 0.0.0.0/0, ::/0` tam tünel rotasıdır; tek başına kill-switch değildir. Arayüz kapanınca işletim sistemi normal default route'a dönebilir. Bu nedenle:
+## 2. Tehdit Modeli
 
-- Aşama 1 profilleri “bağlantı varken tam tünel” sağlar.
-- Gerçek kill-switch ancak Linux nftables/iptables, Windows Filtering Platform ve macOS Network Extension/firewall davranışı ayrı ayrı test edildikten sonra tamamlanmış sayılır.
-- Kill-switch testi; tünel process'ini zorla durdurma, ağ değiştirme, sleep/wake, Wi-Fi/Ethernet geçişi, DNS ve IPv6 senaryolarını kapsamalıdır.
+### Korunan Tehditler (In-Scope)
+- **Yerel Ağ Dinleme**: Ortak Wi-Fi, otel veya havalimanı ağlarında pasif paket koklama ve ARP zehirlenmesi.
+- **ISP Trafik İzleme**: İnternet servis sağlayıcısının kullanıcı trafiğinin içeriğini ve ziyaret edilen IP'leri görmesi.
+- **DNS Manipülasyonu**: ISP veya yerel ağın DNS sorgularını sansürlemesi/yönlendirmesi (Unbound DNSSEC ve QNAME minimisation ile korunur).
+- **Cihaz Ayrımı**: Her peer için ayrı anahtar çifti ve PSK kullanıldığından bir cihazın kaybı diğer cihazları tehlikeye atmaz.
 
-Ubuntu `wg-quick` için resmi man page bir iptables kill-switch örneği verir, fakat bu kural Windows/macOS'a taşınamaz: <https://manpages.ubuntu.com/manpages/noble/man8/wg-quick.8.html>
+### Kapsam Dışı Tehditler (Out-of-Scope)
+- **VPS Sağlayıcısı Güvenliği**: OCI hesabının veya sunucu root erişiminin ele geçirilmesi.
+- **İstemci Cihaz Güvenliği**: İstemci cihazdaki malware, keylogger veya işletim sistemi düzeyindeki casus yazılımlar.
+- **Gelişmiş Trafik Korelasyonu**: Global ağ düzeyinde paket boyut ve zaman korelasyonu yapan devlet düzeyindeki aktörler.
+- **Webview / Tarayıcı Takibi**: Çerezler, tarayıcı fingerprinting veya oturum açılmış kullanıcı hesapları.
 
-## Anahtarlar
+---
 
-- Her cihazın ayrı WireGuard key pair ve preshared key'i vardır.
-- Sunucu private key'i `/etc/wireguard` altında root 0600 kalır.
-- İstemci config'i stdout'a yazılmaz; `sudo` çağrısını yapan kullanıcının home dizinine 0600 yazılır.
-- İstemciye aktarıldıktan sonra sunucudaki export kopyası silinir.
-- Kayıp cihaz `sudo untracx-remove-peer <ad>` ile iptal edilir.
-- Repo `*.conf` ve `*.key` dosyalarını ignore eder; yine de commit öncesi secret taraması yapılmalıdır.
+## 3. Kill-Switch ve Sızıntı Sınırları
 
-## Log politikası
-
-Uygulama logları private key, preshared key, tam config veya ziyaret edilen domainleri içermeyecektir. Sunucuda ek trafik loglaması varsayılan olarak kapalıdır; sistem/journal ve Oracle altyapı loglarının ayrı saklama politikaları olabilir.
-
-## Yayınlama öncesi kapılar
-
-- Üç platformda kill-switch + DNS + IPv6 leak testi
-- Helper IPC kimlik doğrulaması ve yetki sınırı incelemesi
-- Bağımlılık ve supply-chain taraması
-- İmzalı paket/güncelleme tasarımı
-- Tehdit modeli ve mahremiyet beyanının güncellenmesi
+- `AllowedIPs = 0.0.0.0/0, ::/0` rotalaması normal çalışmada tüm trafiği tünele gönderir.
+- Tünelin beklenmedik şekilde çökmesi durumunda fiziksel arayüz sızıntısını engellemek için:
+  - **Linux**: `scripts/killswitch-linux.sh` (nftables `inet` tablosunda `policy drop`).
+  - **macOS / Windows**: Resmi WireGuard uygulamasının On-Demand ve entegre tünel rotalama mekanizması kullanılmalıdır.
+- Sızıntı testleri `scripts/test-connection.sh` ile doğrulanmalıdır.

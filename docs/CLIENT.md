@@ -1,86 +1,104 @@
-# İstemci kurulumu (cihaz başına)
+# İstemci Kurulum ve Bağlantı Kılavuzu
 
-Sunucuda `sudo untracx-add-peer <cihaz-adi>` çalıştırıldıktan sonra config dosyası
-`~/untracx-<cihaz-adi>.conf` olarak (0600 izinle) oluşturulur. Bu dosyayı cihaza
-güvenli bir kanaldan (scp, AirDrop, USB) aktarın ve **sunucudaki kopyayı silin**:
+Untracx profilleri standart WireGuard formatındadır ve resmi WireGuard istemcileriyle %100 uyumludur.
 
+---
+
+## 1. Profil Edinme
+
+### Yöntem A: Zero-Trust Provizyon (Önerilen)
+1. Kendi bilgisayarınızda bir anahtar çifti ve PSK üretin:
+   ```bash
+   untracx keygen
+   untracx genpsk
+   ```
+2. Genel anahtarınızı (`PublicKey`) ve PSK'yı sunucu yöneticisine iletin:
+   ```bash
+   # Sunucuda:
+   sudo untracx-add-peer macbook <CLIENT_PUBLIC_KEY> <PRESHARED_KEY>
+   ```
+3. Kendi cihazınızda istemci konfigürasyonunu oluşturun:
+   ```bash
+   untracx genconfig \
+     --server-public "<SERVER_PUBLIC_KEY>" \
+     --server-ip "<SERVER_PUBLIC_IP>" \
+     --client-ip "10.66.66.X/32" \
+     --preshared-key "<PRESHARED_KEY>" \
+     --output macbook.conf
+   ```
+
+### Yöntem B: Sunucu Taraflı Hızlı Provizyon
+1. Sunucuda cihaz kaydı oluşturun:
+   ```bash
+   sudo untracx-add-peer macbook
+   ```
+2. Konfigürasyonu bilgisayarınıza çekin ve sunucudaki geçici kopyayı silin:
+   ```bash
+   scp ubuntu@<SUNUCU_IP>:~/untracx-macbook.conf .
+   ssh ubuntu@<SUNUCU_IP> 'rm -f ~/untracx-macbook.conf'
+   ```
+
+---
+
+## 2. Platformlara Göre İstemci Kurulumu
+
+### 2.1 macOS
+1. Mac App Store'dan veya [wireguard.com/install](https://www.wireguard.com/install/) adresinden **WireGuard** uygulamasını kurun.
+2. Uygulamayı açın → **Import tunnel(s) from file** → `untracx-macbook.conf` dosyasını seçin.
+3. İlk bağlantıda macOS VPN izin istemini onaylayın ve tüneli aktifleştirin.
+4. **On-Demand**: İsteğe bağlı olarak "On-Demand" seçeneğini işaretleyerek Wi-Fi bağlantılarında otomatik açılmasını sağlayabilirsiniz.
+
+### 2.2 Windows
+1. [wireguard.com/install](https://www.wireguard.com/install/) adresinden resmi WireGuard MSI yükleyicisini kurun.
+2. **Add Tunnel** → `untracx-windows.conf` dosyasını içe aktarın.
+3. **Activate** butonuna tıklayarak bağlantıyı başlatın.
+
+### 2.3 iOS / Android (Mobil QR Kod)
+1. App Store veya Google Play Store'dan resmi **WireGuard** uygulamasını indirin.
+2. Sunucuda veya yerel terminalinizde QR kod oluşturun:
+   ```bash
+   qrencode -t ansiutf8 < untracx-telefon.conf
+   ```
+3. WireGuard uygulamasında **+** → **Scan from QR code** ile kamerayı yöneltin ve tüneli kaydedin.
+
+### 2.4 Linux (CLI)
 ```bash
-ssh ubuntu@<sunucu-ip> 'rm -f ~/untracx-<cihaz-adi>.conf'
+sudo apt-get install -y wireguard wireguard-tools
+sudo install -o root -g root -m 0600 untracx-linux.conf /etc/wireguard/wg0.conf
+sudo systemctl start wg-quick@wg0
+sudo systemctl enable wg-quick@wg0   # Açılışta otomatik başlat (opsiyonel)
 ```
 
-Config dosyası özel anahtar içerir; e-posta/chat ile göndermeyin.
+---
 
-## QR kod (iOS / Android)
+## 3. Bağlantı ve Sızıntı Doğrulaması
 
-Resmi WireGuard uygulamaları config'i QR ile alabilir. Sunucuda veya yerelde:
+Bağlantı kurulduktan sonra aşağıdaki kontrolleri gerçekleştirin:
 
+1. **IPv4 Çıkış IP'si**:
+   ```bash
+   curl -4 https://api.ipify.org
+   ```
+   *Çıktı VPN sunucunuzun public IP'si olmalıdır.*
+
+2. **In-Tunnel DNS Çözümlemesi**:
+   ```bash
+   dig +short @10.66.66.1 google.com
+   ```
+   *VPN içindeki Unbound resolver başarıyla cevap dönmelidir.*
+
+3. **Otomatik Bağlantı Testi**:
+   ```bash
+   export UNTRACX_SERVER="<SUNUCU_IP>"
+   bash scripts/test-connection.sh macbook
+   ```
+
+---
+
+## 4. Cihaz İptali (Revocation)
+
+Cihaz kaybolduğunda veya tünel erişimi sonlandırılmak istendiğinde sunucuda:
 ```bash
-qrencode -t ansiutf8 < ~/untracx-macbook.conf   # terminalde QR yazdırır
-# veya görsel dosya olarak:
-qrencode -o untracx-qr.png < ~/untracx-macbook.conf
+sudo untracx-remove-peer macbook
 ```
-
-`qrencode` yoksa: `sudo apt-get install -y qrencode` (Debian/Ubuntu)
-veya `brew install qrencode` (macOS).
-
-## macOS
-
-1. App Store'dan veya <https://www.wireguard.com/install/> adresinden **WireGuard** uygulamasını kurun.
-2. Uygulamayı açın → **Import tunnel(s) from file** → `untracx-<cihaz-adi>.conf`.
-3. Tüneli açın; ilk istekte **VPN ayarlarına izin** istemi gelir, onaylayın.
-4. İzleme: menü çubuğundaki simgeden aktif tüneli görün.
-
-Komut satırı (wireguard-tools, Homebrew ile):
-
-```bash
-brew install wireguard-tools
-sudo wg-quick up ~/untracx-macbook.conf
-sudo wg-quick down untracx-macbook
-```
-
-Not: `System Settings → VPN` yerine WireGuard uygulamasının kendi arayüzünü kullanın.
-
-## Windows
-
-1. <https://www.wireguard.com/install/> adresinden **WireGuard** kurun.
-2. **Import tunnel(s) from file** → config dosyası.
-3. Tüneli **Activate** edin. Sürücü kurulum izni geldiyse onaylayın (ilk kurulum).
-
-Sürücü sorunlarında: resmi kurulum sayfasındaki talimatların güncel sürümüyle uyumlu
-WireGuard sürücüsünün yüklü olduğundan emin olun.
-
-## Linux (wg-quick)
-
-```bash
-sudo apt-get install -y wireguard wireguard-tools   # veya dağıtıma uygun paket
-sudo install -m 600 ~/untracx-macbook.conf /etc/wireguard/untracx-macbook.conf
-sudo systemctl start wg-quick@untracx-macbook
-sudo systemctl enable wg-quick@untracx-macbook      # açılışta bağlan (opsiyonel)
-```
-
-Bağlantı durumu: `sudo wg show` · Kapat: `sudo systemctl stop wg-quick@untracx-macbook`
-
-Kill-switch isterseniz (önerilir): `sudo bash scripts/killswitch-linux.sh ac`
-
-## Doğrulama (her platform)
-
-Tünel açıkken dış IP sunucu endpoint'i olmalı ve DNS tünel içinden çözülmeli:
-
-```bash
-curl -4 https://api.ipify.org          # sunucu public IP'si dönmeli
-dig +short @10.66.66.1 google.com      # VPN içi DNS cevap vermeli
-```
-
-DNS sorgularının ISP'ye sızıp sızmadığını kontrol etmek için
-`docs/../scripts/test-connection.sh` scripti veya SECURITY.md'deki kill-switch notları kullanılabilir.
-
-## Cihaz iptali
-
-Cihaz kaybolduysa veya artık kullanılmayacaksa sunucuda:
-
-```bash
-sudo untracx-remove-peer <cihaz-adi>
-```
-
-İptal edilen cihazın eski config dosyası artık bağlanamaz; yeni config için
-peer'i yeniden ekleyin.
+İptal edilen cihazın anahtarları canlı arayüzden anında düşürülür ve konfigürasyon dosyası geçersiz kılınır.
