@@ -191,13 +191,13 @@ fn run(cli: Cli) -> Result<(), String> {
             let result = config::render(&cfg);
             private_b64.zeroize();
             let mut rendered = result?;
-            validate_output_path(&output)?;
+            fs_util::validate_safe_path(&output)?;
             fs_util::write_secret_file_atomic(Path::new(&output), &mut rendered)?;
             println!("✓ {output} yazıldı (0600)");
             println!("Bağlanmak için: sudo untracx connect {output}");
         }
         Commands::Connect { config } => {
-            validate_config_path(&config)?;
+            fs_util::validate_safe_path(&config)?;
             wireguard::connect(&config)?
         }
         Commands::ConnectStdin {
@@ -223,13 +223,13 @@ fn run(cli: Cli) -> Result<(), String> {
             };
             let mut rendered = config::render(&cfg)?;
             private_key.zeroize();
-            validate_output_path(&output)?;
+            fs_util::validate_safe_path(&output)?;
             fs_util::write_secret_file_atomic(Path::new(&output), &mut rendered)?;
             println!("✓ {output} yazıldı (0600, stdin'den okunan private key kullanıldı)");
             println!("Bağlanmak için: sudo untracx connect {output}");
         }
         Commands::Down { config } => {
-            validate_config_path(&config)?;
+            fs_util::validate_safe_path(&config)?;
             wireguard::down(&config)?
         }
         Commands::Status => wireguard::status()?,
@@ -250,46 +250,4 @@ fn read_private_key_from_stdin() -> Result<String, String> {
         return Err("stdin boş kaldı; private key sağlayın".into());
     }
     Ok(key)
-}
-
-fn validate_config_path(path: &str) -> Result<(), String> {
-    let p = Path::new(path);
-    let stem = p
-        .file_stem()
-        .ok_or("Geçersiz config yolu")?
-        .to_string_lossy();
-    if stem.contains('/') || stem.contains(' ') || stem.is_empty() {
-        return Err("Config dosya adı geçersiz (path traversal riski)".into());
-    }
-    if p.components().count() > 1 {
-        let parent = p.parent().unwrap_or(Path::new(""));
-        for comp in parent.components() {
-            let s = comp.as_os_str().to_string_lossy();
-            if s == ".." {
-                return Err("Config yolu '..' içeremez".into());
-            }
-        }
-    }
-    Ok(())
-}
-
-fn validate_output_path(path: &str) -> Result<(), String> {
-    let p = Path::new(path);
-    let stem = p
-        .file_stem()
-        .ok_or("Geçersiz çıktı yolu")?
-        .to_string_lossy();
-    if stem.contains('/') || stem.contains(' ') || stem.is_empty() {
-        return Err("Çıkış dosya adı geçersiz (path traversal riski)".into());
-    }
-    if p.components().count() > 1 {
-        let parent = p.parent().unwrap_or(Path::new(""));
-        for comp in parent.components() {
-            let s = comp.as_os_str().to_string_lossy();
-            if s == ".." {
-                return Err("Çıkış yolu '..' içeremez".into());
-            }
-        }
-    }
-    Ok(())
 }

@@ -6,7 +6,7 @@ use std::path::PathBuf;
 #[cfg(unix)]
 use std::fs;
 #[cfg(unix)]
-use std::io::{BufRead, BufReader, Write as _};
+use std::io::{BufRead, BufReader, Read as _, Write as _};
 #[cfg(unix)]
 use std::os::unix::net::{UnixListener, UnixStream};
 #[cfg(unix)]
@@ -200,10 +200,14 @@ fn cmd_connect_req(req: &Value) -> Value {
     if iface.is_empty() {
         return json!({"ok": false, "error": "Gecersiz config dosya adi"});
     }
-    if !is_valid_iface_name(&iface) {
+    if !crate::wireguard::valid_interface_name(&iface) {
         return json!({"ok": false, "error": format!("Gecersiz arayuz adi: {}", iface)});
     }
-    let out = Command::new("wg-quick").args(["up", path]).output();
+    let wg_quick = match crate::wireguard::find_trusted_binary("wg-quick") {
+        Some(b) => b,
+        None => return json!({"ok": false, "error": "wg-quick bulunamadi"}),
+    };
+    let out = Command::new(&wg_quick).args(["up", path]).output();
     match out {
         Ok(o) if o.status.success() => json!({"ok": true, "iface": iface}),
         Ok(o) => json!({"ok": false, "error": String::from_utf8_lossy(&o.stderr).to_string()}),
@@ -217,10 +221,14 @@ fn cmd_down_req(req: &Value) -> Value {
         Some(i) => i,
         None => return json!({"ok": false, "error": "iface zorunlu"}),
     };
-    if !is_valid_iface_name(iface) {
+    if !crate::wireguard::valid_interface_name(iface) {
         return json!({"ok": false, "error": "Gecersiz arayuz adi"});
     }
-    let out = Command::new("wg-quick").args(["down", iface]).output();
+    let wg_quick = match crate::wireguard::find_trusted_binary("wg-quick") {
+        Some(b) => b,
+        None => return json!({"ok": false, "error": "wg-quick bulunamadi"}),
+    };
+    let out = Command::new(&wg_quick).args(["down", iface]).output();
     match out {
         Ok(o) if o.status.success() => json!({"ok": true, "iface": iface}),
         Ok(o) => json!({"ok": false, "error": String::from_utf8_lossy(&o.stderr).to_string()}),
@@ -230,7 +238,11 @@ fn cmd_down_req(req: &Value) -> Value {
 
 #[cfg(unix)]
 fn cmd_status_req() -> Value {
-    let out = Command::new("wg").output();
+    let wg = match crate::wireguard::find_trusted_binary("wg") {
+        Some(b) => b,
+        None => return json!({"ok": false, "error": "wg bulunamadi"}),
+    };
+    let out = Command::new(&wg).output();
     match out {
         Ok(o) => {
             let text = String::from_utf8_lossy(&o.stdout).to_string();
@@ -269,15 +281,6 @@ fn allowed_config_dirs() -> Vec<String> {
 }
 
 #[cfg(unix)]
-fn is_valid_iface_name(name: &str) -> bool {
-    !name.is_empty()
-        && name.len() <= 15
-        && name.chars().all(|c| {
-            c.is_ascii_alphanumeric() || c == '_' || c == '+' || c == '=' || c == '.' || c == '-'
-        })
-}
-
-#[cfg(unix)]
 fn send_json(stream: &mut UnixStream, val: &Value) -> Result<(), String> {
     let mut data = serde_json::to_vec(val).map_err(|e| e.to_string())?;
     data.push(b'\n'); // Newline delimiter for framing
@@ -288,16 +291,18 @@ fn send_json(stream: &mut UnixStream, val: &Value) -> Result<(), String> {
 
 #[cfg(unix)]
 fn recv_json(stream: &mut UnixStream) -> Result<Value, String> {
-    let mut reader = BufReader::new(stream);
+    let mut reader = BufReader::new(stream.take((MAX_JSON_SIZE + 1) as u64));
     let mut line = String::new();
-    const MAX_SIZE: usize = 65536;
 
     let n = reader.read_line(&mut line).map_err(|e| e.to_string())?;
     if n == 0 {
         return Err("Baglanti kapandi".into());
     }
-    if line.len() > MAX_SIZE {
+    if line.len() > MAX_JSON_SIZE {
         return Err("JSON mesaji cok buyuk".into());
     }
     serde_json::from_str(line.trim()).map_err(|e| e.to_string())
 }
+
+#[cfg(unix)]
+const MAX_JSON_SIZE: usize = 65536;
