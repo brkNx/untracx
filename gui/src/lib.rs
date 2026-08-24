@@ -1,16 +1,8 @@
-use untracx::{config, fs_util, helper, keys};
+use untracx::{config, fs_util, helper, keys, wireguard};
 use zeroize::Zeroize;
 
-/// Validates a WireGuard interface/peer name against Linux naming rules.
-/// Allows: alphanumeric, underscore, hyphen, equals, plus, dot (max 15 chars)
 fn is_valid_iface_name(name: &str) -> bool {
-    !name.is_empty()
-        && name.len() <= 15
-        && name != "."
-        && !name.contains("..")
-        && name
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '=' | '+' | '.'))
+    wireguard::valid_interface_name(name)
 }
 
 #[cfg(target_os = "linux")]
@@ -222,32 +214,9 @@ fn generate_config(
 
 #[tauri::command]
 fn save_config(mut content: String, path: String) -> Result<serde_json::Value, String> {
-    validate_output_path(&path)?;
+    fs_util::validate_safe_path(&path)?;
     fs_util::write_secret_file_atomic(std::path::Path::new(&path), &mut content)?;
     Ok(serde_json::json!({"ok": true, "path": path}))
-}
-
-/// Validates output path to prevent path traversal attacks.
-fn validate_output_path(path: &str) -> Result<(), String> {
-    use std::path::Path;
-    let p = Path::new(path);
-    let stem = p
-        .file_stem()
-        .ok_or("Geçersiz çıktı yolu")?
-        .to_string_lossy();
-    if stem.contains('/') || stem.contains(' ') || stem.is_empty() {
-        return Err("Çıkış dosya adı geçersiz (path traversal riski)".into());
-    }
-    if p.components().count() > 1 {
-        let parent = p.parent().unwrap_or(Path::new(""));
-        for comp in parent.components() {
-            let s = comp.as_os_str().to_string_lossy();
-            if s == ".." {
-                return Err("Çıkış yolu '..' içeremez".into());
-            }
-        }
-    }
-    Ok(())
 }
 
 // ── App giriş noktası ──

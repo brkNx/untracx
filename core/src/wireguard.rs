@@ -96,7 +96,9 @@ fn resolve_interface(config_path: &str) -> Result<ConnInfo, String> {
     })
 }
 
-fn valid_interface_name(name: &str) -> bool {
+/// WireGuard arayüz adı beyaz listeden geçer: maks 15 karakter,
+/// yalnızca [A-Za-z0-9_.=+-]. Helper daemonu ve GUI de bunu kullanır.
+pub fn valid_interface_name(name: &str) -> bool {
     !name.is_empty()
         && name.len() <= 15
         && name != "."
@@ -127,7 +129,8 @@ fn check_config_perms(_p: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn find_trusted_binary(binary_name: &str) -> Option<PathBuf> {
+/// Binary'yi önce güvenilir sistem dizinlerinde, sonra PATH üzerinde arar.
+pub(crate) fn find_trusted_binary(binary_name: &str) -> Option<PathBuf> {
     for search_dir in platform::trusted_search_paths() {
         #[cfg(windows)]
         let file_name = if !binary_name.ends_with(".exe") {

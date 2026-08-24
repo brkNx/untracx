@@ -3,6 +3,25 @@ use std::io::Write;
 use std::path::Path;
 use zeroize::Zeroize;
 
+/// Config/çıktı yolu path traversal'a karşı doğrular:
+/// ".." bileşeni reddedilir, dosya adı boş/whitespace/slash içeremez.
+pub fn validate_safe_path(path: &str) -> Result<(), String> {
+    let p = Path::new(path);
+    for comp in p.components() {
+        if let std::path::Component::ParentDir = comp {
+            return Err(format!("Yol '..' içeremez: {path}"));
+        }
+    }
+    let stem = p
+        .file_stem()
+        .ok_or("Geçersiz dosya yolu")?
+        .to_string_lossy();
+    if stem.is_empty() || stem.contains('/') || stem.contains(char::is_whitespace) {
+        return Err(format!("Dosya adı geçersiz: {path}"));
+    }
+    Ok(())
+}
+
 /// Writes secret content to a file atomically with 0600 permissions.
 /// Prevents symlink hijacking, race conditions, and world-readable exposure.
 pub fn write_secret_file_atomic(dest_path: &Path, content: &mut str) -> Result<(), String> {
@@ -65,6 +84,23 @@ pub fn write_secret_file_atomic(dest_path: &Path, content: &mut str) -> Result<(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn validate_safe_path_accepts_normal_paths() {
+        assert!(validate_safe_path("client.conf").is_ok());
+        assert!(validate_safe_path("/home/user/.config/untracx/wg0.conf").is_ok());
+        assert!(validate_safe_path("~/wg0.conf").is_ok());
+    }
+
+    #[test]
+    fn validate_safe_path_rejects_traversal_and_bad_names() {
+        assert!(validate_safe_path("../pwn.conf").is_err());
+        assert!(validate_safe_path("/tmp/../etc/passwd").is_err());
+        assert!(validate_safe_path("/etc/../../pwn.conf").is_err());
+        assert!(validate_safe_path("a b.conf").is_err());
+        assert!(validate_safe_path("a\tb.conf").is_err());
+        assert!(validate_safe_path("/").is_err());
+    }
 
     #[test]
     fn atomic_secret_write_works_and_zeroizes() {
