@@ -11,7 +11,7 @@ export default function StatusIndicator({ label, connected }: Props) {
         ? 'status--connected'
         : 'status--disconnected';
 
-  const text = connected === null ? 'Yükleniyor...' : connected ? 'Bağlı' : 'Bağlı değil';
+  const text = connected === null ? 'Loading...' : connected ? 'Connected' : 'Disconnected';
 
   return (
     <span className={`status ${className}`} role="status" aria-live="polite">

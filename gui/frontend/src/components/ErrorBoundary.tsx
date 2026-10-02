@@ -25,13 +25,13 @@ export default class ErrorBoundary extends Component<Props, State> {
     if (this.state.hasError) {
       return (
         <div className="error-boundary">
-          <h2>Bir hata oluştu</h2>
-          <p>{this.state.error?.message || 'Beklenmeyen bir hata.'}</p>
+          <h2>Something went wrong</h2>
+          <p>{this.state.error?.message || 'An unexpected error occurred.'}</p>
           <button
             className="btn btn--primary"
             onClick={() => this.setState({ hasError: false, error: null })}
           >
-            Tekrar Dene
+            Try Again
           </button>
         </div>
       );

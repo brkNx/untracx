@@ -18,10 +18,10 @@ export default function ConnectionPanel({ onStatusChange }: Props) {
     setMessage(null);
     try {
       await vpnConnect(configPath);
-      setMessage({ type: 'success', text: 'VPN bağlantısı kuruldu.' });
+      setMessage({ type: 'success', text: 'VPN connected.' });
       setTimeout(onStatusChange, 1500);
     } catch (e) {
-      setMessage({ type: 'error', text: `Bağlantı hatası: ${e}` });
+      setMessage({ type: 'error', text: `Connection error: ${e}` });
     }
     setLoading(false);
   };
@@ -31,10 +31,10 @@ export default function ConnectionPanel({ onStatusChange }: Props) {
     setMessage(null);
     try {
       await vpnDisconnect(iface);
-      setMessage({ type: 'success', text: 'VPN bağlantısı kesildi.' });
+      setMessage({ type: 'success', text: 'VPN disconnected.' });
       setTimeout(onStatusChange, 1000);
     } catch (e) {
-      setMessage({ type: 'error', text: `Bağlantı kesme hatası: ${e}` });
+      setMessage({ type: 'error', text: `Disconnection error: ${e}` });
     }
     setLoading(false);
   };
@@ -42,7 +42,15 @@ export default function ConnectionPanel({ onStatusChange }: Props) {
   return (
     <div className="card">
       <div className="card__header">
-        <span className="card__title">VPN Bağlantısı</span>
+        <div>
+          <span className="card__title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            </svg>
+            VPN Tunnel Connection
+          </span>
+          <div className="card__subtitle">Initiate or terminate encrypted WireGuard session</div>
+        </div>
         {loading && <Spinner />}
       </div>
 
@@ -50,9 +58,9 @@ export default function ConnectionPanel({ onStatusChange }: Props) {
 
       <div className="grid-2">
         <div className="input-group">
-          <label>Config yolu</label>
+          <label>Profile Config Path</label>
           <input
-            className="input"
+            className="input input--mono"
             type="text"
             value={configPath}
             onChange={(e) => setConfigPath(e.target.value)}
@@ -60,48 +68,39 @@ export default function ConnectionPanel({ onStatusChange }: Props) {
           />
         </div>
         <div className="input-group">
-          <label>Arayüz adı</label>
+          <label>Interface Name</label>
           <input
-            className="input"
+            className="input input--mono"
             type="text"
             value={iface}
             onChange={(e) => setIface(e.target.value)}
             placeholder="wg0"
-            style={{ maxWidth: 120 }}
+            style={{ maxWidth: 160 }}
           />
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+      <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
         <button
           className="btn btn--primary"
           onClick={handleConnect}
           disabled={loading || !configPath.trim()}
         >
-          {loading ? 'Bağlanıyor...' : 'Bağlan'}
+          {loading ? 'Connecting...' : 'Connect'}
         </button>
         <button
           className="btn btn--danger"
           onClick={handleDisconnect}
           disabled={loading || !iface.trim()}
         >
-          {loading ? 'Kesiliyor...' : 'Bağlantıyı Kes'}
+          {loading ? 'Disconnecting...' : 'Disconnect'}
         </button>
       </div>
 
-      <div
-        style={{
-          marginTop: 14,
-          paddingTop: 10,
-          borderTop: '1px solid var(--border)',
-          fontSize: 12,
-          color: 'var(--text-secondary)',
-        }}
-      >
-        💡 <strong>Bağlantı Yöntemi:</strong> GUI üzerinden tek tıkla bağlanmak için ayrıcalıklı
-        helper servisinin (<code>sudo untracx helper start</code>) çalışması gerekir. Dilerseniz
-        oluşturduğunuz <code>.conf</code> dosyasını resmi WireGuard uygulamasına aktararak da
-        doğrudan kullanabilirsiniz.
+      <div className="info-callout">
+        💡 <strong>Connection Architecture:</strong> Starting the tunnel directly from this desktop GUI requires
+        the background helper service (<code>sudo untracx helper start</code>). Alternatively, you can import
+        your generated <code>.conf</code> profile into the official WireGuard application.
       </div>
     </div>
   );

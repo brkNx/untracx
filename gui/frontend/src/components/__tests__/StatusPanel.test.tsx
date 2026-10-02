@@ -23,10 +23,10 @@ describe('StatusPanel', () => {
   });
 
   it('shows error message on failure', async () => {
-    mockInvoke.mockRejectedValue('Bağlantı hatası');
+    mockInvoke.mockRejectedValue('Connection error');
     render(<StatusPanel />);
     await waitFor(() => {
-      expect(screen.getByText('Durum alınamadı')).toBeInTheDocument();
+      expect(screen.getByText('Could not retrieve status')).toBeInTheDocument();
     });
   });
 
@@ -34,7 +34,7 @@ describe('StatusPanel', () => {
     mockInvoke.mockResolvedValue({ ok: true, connected: false });
     render(<StatusPanel />);
     await waitFor(() => {
-      expect(screen.getByText('Otomatik yenile')).toBeInTheDocument();
+      expect(screen.getByText('Auto-refresh')).toBeInTheDocument();
     });
     await waitFor(() => {
       expect(mockInvoke).toHaveBeenCalled();

@@ -39,7 +39,7 @@ export default function SettingsPanel() {
         serverPort: serverPort ?? DEFAULTS.serverPort,
       });
     } catch {
-      // Store plugin mevcut değilse varsayılanları kullan
+      // Fall back to default parameters if store plugin is unavailable
     }
   };
 
@@ -53,10 +53,10 @@ export default function SettingsPanel() {
       await store.set('serverPort', settings.serverPort);
       await store.save();
       setSaved(true);
-      setMessage({ type: 'success', text: 'Ayarlar kaydedildi.' });
+      setMessage({ type: 'success', text: 'Settings saved successfully.' });
       setTimeout(() => setSaved(false), 2000);
     } catch {
-      setMessage({ type: 'error', text: 'Ayarlar kaydedilemedi (store plugin gerekli).' });
+      setMessage({ type: 'error', text: 'Failed to save settings (store plugin unavailable).' });
     }
   };
 
@@ -68,44 +68,55 @@ export default function SettingsPanel() {
   return (
     <div className="card">
       <div className="card__header">
-        <span className="card__title">Ayarlar</span>
+        <div>
+          <span className="card__title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg>
+            Preferences &amp; Defaults
+          </span>
+          <div className="card__subtitle">
+            Configure default interface names, configuration file locations, and connection fallback endpoints.
+          </div>
+        </div>
       </div>
 
       {message && <Message type={message.type} text={message.text} />}
 
       <div className="grid-2">
         <div className="input-group">
-          <label>Varsayılan config yolu</label>
+          <label>Default Configuration Path</label>
           <input
-            className="input"
+            className="input input--mono"
             type="text"
             value={settings.configPath}
             onChange={(e) => update('configPath', e.target.value)}
           />
         </div>
         <div className="input-group">
-          <label>Varsayılan arayüz</label>
+          <label>Default Interface Name</label>
           <input
-            className="input"
+            className="input input--mono"
             type="text"
             value={settings.interfaceName}
             onChange={(e) => update('interfaceName', e.target.value)}
-            style={{ maxWidth: 120 }}
           />
         </div>
         <div className="input-group">
-          <label>Sunucu IP</label>
+          <label>Default Server IP / Hostname</label>
           <input
-            className="input"
+            className="input input--mono"
             type="text"
+            placeholder="e.g. 140.238.x.x"
             value={settings.serverIp}
             onChange={(e) => update('serverIp', e.target.value)}
           />
         </div>
         <div className="input-group">
-          <label>Sunucu portu</label>
+          <label>Default Port (UDP)</label>
           <input
-            className="input"
+            className="input input--mono"
             type="number"
             min={1}
             max={65535}
@@ -114,14 +125,24 @@ export default function SettingsPanel() {
               const v = Number(e.target.value);
               if (!isNaN(v) && v > 0 && v <= 65535) update('serverPort', v);
             }}
-            style={{ maxWidth: 120 }}
           />
         </div>
       </div>
 
-      <button className="btn btn--primary" onClick={handleSave} style={{ marginTop: 12 }}>
-        {saved ? 'Kaydedildi ✓' : 'Kaydet'}
-      </button>
+      <div style={{ marginTop: 14 }}>
+        <button className="btn btn--primary" onClick={handleSave}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+            <polyline points="17 21 17 13 7 13 7 21" />
+            <polyline points="7 3 7 8 15 8" />
+          </svg>
+          {saved ? 'Saved ✓' : 'Save Changes'}
+        </button>
+      </div>
+
+      <div className="info-callout" style={{ marginTop: 20 }}>
+        💡 <strong>Quick Tip:</strong> When using Oracle Cloud Infrastructure (OCI) Free Tier, set the default IP to your Oracle Instance Public IP and keep UDP port <code>51820</code> open in your VCN Ingress Rules.
+      </div>
     </div>
   );
 }

@@ -1,72 +1,72 @@
-# untracx GUI
+# untracx Desktop Client & GUI
 
-Tauri 2 + React TypeScript frontend for the untracx VPN.
+Tauri 2 + React 19 + TypeScript frontend with a modern Linear/Tailscale dark design system for the untracx WireGuard VPN client.
 
-## Kurulum
+## Development Setup
 
 ```bash
 cd gui/frontend
 npm install
-npm run dev    # http://localhost:5173
-npm run build  # prod build → dist/
+npm run dev    # Starts Vite dev server at http://localhost:5173
+npm run build  # Typechecks and builds production bundle -> dist/
 ```
 
-## Tauri Build
+## Tauri Production Builds
 
 ```bash
-# macOS
+# macOS (universal or architecture specific)
 npm run tauri build
 
-# Linux
+# Linux (Debian / RPM / AppImage)
 npm run tauri build -- --target x86_64-unknown-linux-gnu
 
-# Windows
+# Windows (MSI / NSIS installer)
 npm run tauri build -- --target x86_64-pc-windows-msvc
 ```
 
-## Ekran Görüntüleri
+## Visual Architecture & Interface
 
 <p align="center">
   <img src="../docs/gui-screenshot.png" alt="Untracx GUI Overview" width="750">
 </p>
 
-## Tauri Komutları
+## Tauri IPC Commands
 
-| Komut | Parametre | Açıklama |
+| Command | Arguments | Description |
 |---|---|---|
-| `helper_start` | — | systemd user service olarak helper'ı başlatır |
-| `helper_stop` | — | Helper servisini durdurur |
-| `helper_status` | — | Helper durumu + socket varlık denetimi |
-| `vpn_connect` | `configPath` | Config dosyasıyla VPN bağlantısı kurar |
-| `vpn_down` | `iface` | Arayüz adıyla VPN bağlantısını keser |
-| `vpn_status` | — | WireGuard bağlantı ve trafik durumunu sorgular |
-| `peer_list` | `iface?` | Sunucudaki kayıtlı peer listesini getirir |
-| `peer_add` | `name` | Yeni peer ekleme komut yönergesini hazırlar |
-| `peer_remove` | `name` | Peer kaldırma komut yönergesini hazırlar |
-| `keygen` | — | X25519 Curve25519 anahtar çifti ve PSK üretir |
-| `public_from_private` | `privateKey` | Özel anahtardan genel anahtarı türetir |
-| `validate_private_key` | `privateKey` | Base64 Curve25519 özel anahtar geçerliliğini doğrular |
-| `validate_public_key` | `publicKey` | Base64 Curve25519 genel anahtar geçerliliğini doğrular |
-| `generate_config` | `clientPrivate`, `serverPublic`, `serverIp`, `clientIp`, `dns`, `mtu`, `port`, `presharedKey?` | Standart WireGuard istemci konfigürasyonunu üretir |
-| `save_config` | `content`, `path` | Konfigürasyonu `0600` izinleriyle atomik olarak diske yazar |
+| `helper_start` | — | Starts the untracx privileged helper daemon |
+| `helper_stop` | — | Gracefully stops the privileged helper service |
+| `helper_status` | — | Inspects helper lifecycle and Unix domain socket / named pipe |
+| `vpn_connect` | `configPath` | Activates WireGuard tunnel using specified configuration path |
+| `vpn_down` | `iface` | Tears down active tunnel interface |
+| `vpn_status` | — | Queries real-time WireGuard link state, endpoint, and bandwidth telemetry |
+| `peer_list` | `iface?` | Retrieves active peer configuration from server/client interface |
+| `peer_add` | `name` | Generates safe server-side peer provisioning instructions |
+| `peer_remove` | `name` | Generates safe server-side peer revocation instructions |
+| `keygen` | — | Generates ephemeral or static Curve25519 keypair and post-quantum PSK |
+| `public_from_private` | `privateKey` | Derives X25519 public key from private key deterministically |
+| `validate_private_key` | `privateKey` | Validates Base64 Curve25519 private key formatting and length |
+| `validate_public_key` | `publicKey` | Validates Base64 Curve25519 public key formatting and length |
+| `generate_config` | `clientPrivate`, `serverPublic`, `serverIp`, `clientIp`, `dns`, `mtu`, `port`, `presharedKey?` | Generates injection-proof WireGuard client profile |
+| `save_config` | `content`, `path` | Atomically writes configuration file with strict `0600` permissions |
 
-## Test ve Doğrulama
+## Testing & Quality Assurance
 
 ```bash
-# Frontend testleri (Vitest)
+# Run unit & integration tests (Vitest)
 npm --prefix gui/frontend run test
 
-# Frontend lint ve kod stili kontrolü
+# Frontend linting and code formatting
 npm --prefix gui/frontend run lint
 npm --prefix gui/frontend run format:check
 
-# Ekran görüntülerini otomatik yeniden üretme
+# Automated UI screenshot capture
 node gui/frontend/capture-all.js
 ```
 
-## Güvenlik
+## Security Model
 
-- GUI root/Admin olarak çalıştırılmaz.
-- Helper yalnız önceden tanımlı profil ve ağ işlemlerini kabul eder.
-- Özel anahtarlar bellekten anında `zeroize` edilir; istemci özel anahtarı sunucuya gönderilmez (Zero-Trust).
-- Config dosyaları disk üzerinde `0600` izinleri ve atomik dosya işlemleri (`O_NOFOLLOW`) ile yazılır.
+- **Least Privilege:** GUI frontend never executes as root or administrator.
+- **Privilege Separation:** Privileged helper daemon strictly restricts operations to pre-whitelisted interface names and paths.
+- **Zero-Trust Ephemeral Keys:** Private keys are zeroized in memory and never transmitted to remote servers.
+- **Atomic Operations:** Configuration files are written atomically using safe file operations (`O_NOFOLLOW`, `0600` permissions) to prevent symlink attacks and race conditions.

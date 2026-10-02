@@ -17,7 +17,7 @@ beforeEach(() => {
 describe('ConfigGenPanel', () => {
   it('renders all config generator input fields', () => {
     render(<ConfigGenPanel />);
-    expect(screen.getByText('Config Üretici')).toBeInTheDocument();
+    expect(screen.getByText('Configuration Generator')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('X25519 private key (base64)')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('X25519 public key (base64)')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('10.0.0.1')).toBeInTheDocument();
@@ -42,7 +42,7 @@ describe('ConfigGenPanel', () => {
       target: { value: '1.2.3.4' },
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Config Üret' }));
+    fireEvent.click(screen.getByRole('button', { name: /Generate Profile/ }));
 
     await waitFor(() => {
       expect(mockInvoke).toHaveBeenCalledWith('generate_config', {
@@ -55,11 +55,11 @@ describe('ConfigGenPanel', () => {
         port: 51820,
         presharedKey: undefined,
       });
-      expect(screen.getByText('Config üretildi.')).toBeInTheDocument();
+      expect(screen.getByText('Configuration profile generated successfully.')).toBeInTheDocument();
       expect(screen.getByText(/\[Interface\]/)).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Panoya Kopyala' }));
+    fireEvent.click(screen.getByRole('button', { name: /Copy to Clipboard/ }));
     expect(navigator.clipboard.writeText).toHaveBeenCalled();
   });
 });

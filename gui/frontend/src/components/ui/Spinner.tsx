@@ -7,7 +7,7 @@ export default function Spinner({ size = 'sm' }: Props) {
     <span
       className={`spinner ${size === 'lg' ? 'spinner--lg' : ''}`}
       role="status"
-      aria-label="Yükleniyor"
+      aria-label="Loading"
     />
   );
 }

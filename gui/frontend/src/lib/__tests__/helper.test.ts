@@ -24,14 +24,14 @@ beforeEach(() => {
 
 describe('helper', () => {
   it('helperStart calls correct command', async () => {
-    mockInvoke.mockResolvedValue('Helper servisi başlatıldı');
+    mockInvoke.mockResolvedValue('Helper service started');
     const result = await helperStart();
     expect(mockInvoke).toHaveBeenCalledWith('helper_start', undefined);
-    expect(result).toBe('Helper servisi başlatıldı');
+    expect(result).toBe('Helper service started');
   });
 
   it('helperStop calls correct command', async () => {
-    mockInvoke.mockResolvedValue('Helper servisi durduruldu');
+    mockInvoke.mockResolvedValue('Helper service stopped');
     await helperStop();
     expect(mockInvoke).toHaveBeenCalledWith('helper_stop', undefined);
   });
@@ -85,15 +85,15 @@ describe('helper', () => {
 
   it('peerAdd passes name', async () => {
     mockInvoke.mockResolvedValue({ ok: true });
-    await peerAdd('telefonum');
-    expect(mockInvoke).toHaveBeenCalledWith('peer_add', { name: 'telefonum' });
+    await peerAdd('mobile-phone');
+    expect(mockInvoke).toHaveBeenCalledWith('peer_add', { name: 'mobile-phone' });
   });
 
   it('peerRemove passes name', async () => {
     mockInvoke.mockResolvedValue({ ok: true });
-    await peerRemove('eski-cihaz');
+    await peerRemove('legacy-device');
     expect(mockInvoke).toHaveBeenCalledWith('peer_remove', {
-      name: 'eski-cihaz',
+      name: 'legacy-device',
     });
   });
 
@@ -146,7 +146,7 @@ describe('helper', () => {
   });
 
   it('throws on invoke error', async () => {
-    mockInvoke.mockRejectedValue('bağlantı hatası');
-    await expect(helperStart()).rejects.toThrow('bağlantı hatası');
+    mockInvoke.mockRejectedValue('connection error');
+    await expect(helperStart()).rejects.toThrow('connection error');
   });
 });

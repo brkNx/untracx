@@ -25,10 +25,10 @@ export default function KeygenPanel() {
       setKeyPair(kp);
       setMessage({
         type: 'success',
-        text: 'Yeni X25519 Curve25519 anahtar çifti ve PSK başarıyla üretildi.',
+        text: 'New X25519 keypair and post-quantum PSK generated successfully.',
       });
     } catch (e) {
-      setMessage({ type: 'error', text: `Üretim hatası: ${e}` });
+      setMessage({ type: 'error', text: `Generation error: ${e}` });
     }
     setLoading(false);
   };
@@ -40,9 +40,9 @@ export default function KeygenPanel() {
     try {
       const result = await publicFromPrivateKey(privInput.trim());
       setDerivedPublic(result);
-      setMessage({ type: 'success', text: 'Genel anahtar başarıyla türetildi.' });
+      setMessage({ type: 'success', text: 'Public key derived successfully.' });
     } catch (e) {
-      setMessage({ type: 'error', text: `Türetme hatası: ${e}` });
+      setMessage({ type: 'error', text: `Derivation error: ${e}` });
     }
     setLoading(false);
   };
@@ -53,9 +53,9 @@ export default function KeygenPanel() {
     setMessage(null);
     try {
       await validatePrivateKey(privInput.trim());
-      setMessage({ type: 'success', text: 'Özel anahtar geçerli (32-byte Curve25519).' });
+      setMessage({ type: 'success', text: 'Private key is valid (32-byte Curve25519).' });
     } catch (e) {
-      setMessage({ type: 'error', text: `Geçersiz özel anahtar: ${e}` });
+      setMessage({ type: 'error', text: `Invalid private key: ${e}` });
     }
     setLoading(false);
   };
@@ -66,14 +66,14 @@ export default function KeygenPanel() {
     setMessage(null);
     try {
       await validatePublicKey(pubInput.trim());
-      setMessage({ type: 'success', text: 'Genel anahtar geçerli (32-byte Curve25519).' });
+      setMessage({ type: 'success', text: 'Public key is valid (32-byte Curve25519).' });
     } catch (e) {
-      setMessage({ type: 'error', text: `Geçersiz genel anahtar: ${e}` });
+      setMessage({ type: 'error', text: `Invalid public key: ${e}` });
     }
     setLoading(false);
   };
 
-  const copyToClipboard = (text: string, label = 'Panoya kopyalandı.') => {
+  const copyToClipboard = (text: string, label = 'Copied to clipboard.') => {
     navigator.clipboard.writeText(text);
     setMessage({ type: 'info', text: label });
   };
@@ -81,104 +81,120 @@ export default function KeygenPanel() {
   return (
     <div className="card">
       <div className="card__header">
-        <span className="card__title">Anahtar Yönetimi &amp; Zero-Trust Provizyon</span>
+        <div>
+          <span className="card__title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21 2l-2 2m-1-1l-3 3m5 0l-3-3m-6 8a5 5 0 1 1-7-7 5 5 0 0 1 7 7zm0 0l7 7-2 2-2-2-2 2-4-4" />
+            </svg>
+            Key Management &amp; Provisioning
+          </span>
+          <div className="card__subtitle">
+            Generate ephemeral or static X25519 Curve25519 keys with post-quantum pre-shared keys.
+          </div>
+        </div>
         {loading && <Spinner />}
       </div>
 
       {message && <Message type={message.type} text={message.text} />}
 
-      {/* Üret */}
-      <div style={{ marginBottom: 16 }}>
+      <div style={{ marginBottom: 18 }}>
         <button className="btn btn--primary" onClick={handleGenerate} disabled={loading}>
-          Yeni Anahtar Çifti Üret
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+          Generate New Key Pair
         </button>
       </div>
 
       {keyPair && (
         <div
           style={{
-            marginBottom: 16,
-            background: 'var(--bg-input)',
-            padding: 12,
-            borderRadius: 'var(--radius-sm)',
-            border: '1px solid var(--border)',
+            marginBottom: 20,
+            background: 'var(--bg-surface-elevated)',
+            padding: 16,
+            borderRadius: 'var(--radius-md)',
+            border: '1px solid var(--border-subtle)',
           }}
         >
           <div className="input-group">
-            <label>Genel Anahtar (Public Key — Sunucuya Verilecek):</label>
-            <div className="key-display">
-              {keyPair.publicKey}
+            <label>Public Key (Server-side Identity)</label>
+            <div className="code-box">
+              <span className="code-box__text">{keyPair.publicKey}</span>
               <button
-                className="btn btn--secondary btn--sm key-display__copy"
-                onClick={() => copyToClipboard(keyPair.publicKey, 'Genel anahtar kopyalandı.')}
+                className="btn btn--secondary btn--sm"
+                onClick={() => copyToClipboard(keyPair.publicKey, 'Public key copied to clipboard.')}
               >
-                Kopyala
+                Copy
               </button>
             </div>
           </div>
 
           {keyPair.privateKey && (
-            <div className="input-group" style={{ marginTop: 12 }}>
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: 4,
-                }}
-              >
-                <label style={{ margin: 0 }}>Özel Anahtar (Private Key — Gizli Tutulmalı):</label>
+            <div className="input-group" style={{ marginTop: 14 }}>
+              <label>
+                <span>Private Key (Client Secret)</span>
                 <button
+                  type="button"
                   className="btn btn--secondary btn--sm"
-                  style={{ fontSize: 11, padding: '2px 6px' }}
+                  style={{ fontSize: 11, padding: '2px 8px' }}
                   onClick={() => setShowPrivate(!showPrivate)}
                 >
-                  {showPrivate ? 'Gizle' : 'Göster'}
+                  {showPrivate ? 'Hide' : 'Show'}
                 </button>
-              </div>
-              <div className="key-display">
-                {showPrivate ? keyPair.privateKey : '••••••••••••••••••••••••••••••••••••••••••••'}
+              </label>
+              <div className="code-box">
+                <span className="code-box__text">
+                  {showPrivate ? keyPair.privateKey : '••••••••••••••••••••••••••••••••••••••••••••'}
+                </span>
                 <button
-                  className="btn btn--secondary btn--sm key-display__copy"
-                  onClick={() => copyToClipboard(keyPair.privateKey!, 'Özel anahtar kopyalandı.')}
+                  className="btn btn--secondary btn--sm"
+                  onClick={() => copyToClipboard(keyPair.privateKey!, 'Private key copied to clipboard.')}
                 >
-                  Kopyala
+                  Copy
                 </button>
               </div>
             </div>
           )}
 
           {keyPair.presharedKey && (
-            <div className="input-group" style={{ marginTop: 12 }}>
-              <label>Pre-Shared Key (PSK — Kuantum Sonrası Koruma):</label>
-              <div className="key-display">
-                {keyPair.presharedKey}
+            <div className="input-group" style={{ marginTop: 14 }}>
+              <label>Pre-Shared Key (Post-Quantum Guard)</label>
+              <div className="code-box">
+                <span className="code-box__text">{keyPair.presharedKey}</span>
                 <button
-                  className="btn btn--secondary btn--sm key-display__copy"
-                  onClick={() => copyToClipboard(keyPair.presharedKey!, 'PSK kopyalandı.')}
+                  className="btn btn--secondary btn--sm"
+                  onClick={() => copyToClipboard(keyPair.presharedKey!, 'PSK copied to clipboard.')}
                 >
-                  Kopyala
+                  Copy
                 </button>
               </div>
             </div>
           )}
 
-          <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 8 }}>
-            🔒 <strong>Zero-Trust Güvenlik:</strong> Özel anahtarınız cihazınızda üretilmiştir.
-            Sunucu yöneticisine yalnızca Genel Anahtarınızı iletin.
-          </p>
+          <div className="info-callout" style={{ marginTop: 14 }}>
+            🔒 <strong>Zero-Trust Architecture:</strong> Cryptographic keys are generated strictly on your local device. Share only your Public Key with server administrators.
+          </div>
         </div>
       )}
 
-      {/* Özel anahtardan türetme */}
-      <div style={{ borderTop: '1px solid var(--border)', paddingTop: 16, marginTop: 8 }}>
+      {/* Key Derivation & Validation */}
+      <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 18, marginTop: 12 }}>
+        <div style={{ marginBottom: 14 }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+            Derivation &amp; Verification
+          </span>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+            Compute public keys deterministically from private keys or verify Base64 format integrity.
+          </div>
+        </div>
+
         <div className="input-group">
-          <label>Özel anahtardan genel anahtar türet</label>
-          <div className="input-row">
+          <label>Derive public key from private key</label>
+          <div style={{ display: 'flex', gap: 8 }}>
             <input
-              className="input"
+              className="input input--mono"
               type="password"
-              placeholder="X25519 özel anahtar (base64)"
+              placeholder="X25519 private key (base64)"
               value={privInput}
               onChange={(e) => setPrivInput(e.target.value)}
             />
@@ -187,40 +203,40 @@ export default function KeygenPanel() {
               onClick={handleDerive}
               disabled={loading || !privInput.trim()}
             >
-              Türet
+              Derive
             </button>
             <button
               className="btn btn--secondary btn--sm"
               onClick={handleValidatePrivate}
               disabled={loading || !privInput.trim()}
             >
-              Doğrula
+              Validate
             </button>
           </div>
         </div>
 
         {derivedPublic && (
-          <div className="input-group">
-            <label>Türetilen Genel Anahtar</label>
-            <div className="key-display">
-              {derivedPublic.publicKey}
+          <div className="input-group" style={{ marginTop: 10 }}>
+            <label>Derived Public Key</label>
+            <div className="code-box">
+              <span className="code-box__text">{derivedPublic.publicKey}</span>
               <button
-                className="btn btn--secondary btn--sm key-display__copy"
-                onClick={() => copyToClipboard(derivedPublic.publicKey)}
+                className="btn btn--secondary btn--sm"
+                onClick={() => copyToClipboard(derivedPublic.publicKey, 'Derived public key copied.')}
               >
-                Kopyala
+                Copy
               </button>
             </div>
           </div>
         )}
 
-        <div className="input-group">
-          <label>Genel anahtar doğrula</label>
-          <div className="input-row">
+        <div className="input-group" style={{ marginTop: 14 }}>
+          <label>Validate public key</label>
+          <div style={{ display: 'flex', gap: 8 }}>
             <input
-              className="input"
+              className="input input--mono"
               type="text"
-              placeholder="X25519 genel anahtar (base64)"
+              placeholder="X25519 public key (base64)"
               value={pubInput}
               onChange={(e) => setPubInput(e.target.value)}
             />
@@ -229,7 +245,7 @@ export default function KeygenPanel() {
               onClick={handleValidatePublic}
               disabled={loading || !pubInput.trim()}
             >
-              Doğrula
+              Validate
             </button>
           </div>
         </div>

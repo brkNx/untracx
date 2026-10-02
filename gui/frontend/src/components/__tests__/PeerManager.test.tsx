@@ -13,11 +13,11 @@ describe('PeerManager', () => {
   it('renders initial empty peers list and interface input', async () => {
     mockInvoke.mockResolvedValue({ ok: true, peers: [], interface: 'wg0' });
     render(<PeerManager />);
-    expect(screen.getByText(/Sunucu Peer Yönetimi/)).toBeInTheDocument();
+    expect(screen.getByText(/Server Peer Management/)).toBeInTheDocument();
     expect(screen.getByDisplayValue('wg0')).toBeInTheDocument();
     await waitFor(() => {
       expect(
-        screen.getByText(/Sunucuda kayıtlı yerel önbellek peer kaydı yok/),
+        screen.getByText(/No cached local peer records found on server/),
       ).toBeInTheDocument();
     });
   });
@@ -38,19 +38,19 @@ describe('PeerManager', () => {
     mockInvoke.mockImplementation(async (cmd) => {
       if (cmd === 'peer_list') return { ok: true, peers: [] };
       if (cmd === 'peer_add')
-        return { ok: true, output: 'Sunucuda çalıştırmak için: sudo untracx-add-peer iphone' };
+        return { ok: true, output: 'To run on server: sudo untracx-add-peer iphone' };
       return { ok: true };
     });
 
     render(<PeerManager />);
-    const input = screen.getByPlaceholderText('cihaz-adı (örn. macbook)');
+    const input = screen.getByPlaceholderText('device-name (e.g. macbook)');
     fireEvent.change(input, { target: { value: 'iphone' } });
-    const buttons = screen.getAllByRole('button', { name: 'Komut Üret' });
+    const buttons = screen.getAllByRole('button', { name: 'Generate Command' });
     fireEvent.click(buttons[0]);
 
     await waitFor(() => {
       expect(mockInvoke).toHaveBeenCalledWith('peer_add', { name: 'iphone' });
-      expect(screen.getByText(/Sunucu komutu hazırlandı: "iphone"/)).toBeInTheDocument();
+      expect(screen.getByText(/Server command prepared: "iphone"/)).toBeInTheDocument();
     });
   });
 
@@ -58,19 +58,19 @@ describe('PeerManager', () => {
     mockInvoke.mockImplementation(async (cmd) => {
       if (cmd === 'peer_list') return { ok: true, peers: [] };
       if (cmd === 'peer_remove')
-        return { ok: true, output: 'Sunucuda çalıştırmak için: sudo untracx-remove-peer laptop' };
+        return { ok: true, output: 'To run on server: sudo untracx-remove-peer laptop' };
       return { ok: true };
     });
 
     render(<PeerManager />);
-    const input = screen.getByPlaceholderText('cihaz-adı (örn. eski-telefon)');
+    const input = screen.getByPlaceholderText('device-name (e.g. old-phone)');
     fireEvent.change(input, { target: { value: 'laptop' } });
-    const buttons = screen.getAllByRole('button', { name: 'Komut Üret' });
+    const buttons = screen.getAllByRole('button', { name: 'Generate Command' });
     fireEvent.click(buttons[1]);
 
     await waitFor(() => {
       expect(mockInvoke).toHaveBeenCalledWith('peer_remove', { name: 'laptop' });
-      expect(screen.getByText(/Sunucu kaldırma komutu hazırlandı: "laptop"/)).toBeInTheDocument();
+      expect(screen.getByText(/Server revocation command prepared: "laptop"/)).toBeInTheDocument();
     });
   });
 });

@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Varsayılan capabilities — untracx GUI",
+  "description": "Default capabilities — untracx GUI",
   "windows": ["main"],
   "permissions": [
     "core:default",

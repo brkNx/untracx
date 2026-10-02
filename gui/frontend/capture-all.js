@@ -2,21 +2,26 @@ import { chromium } from 'playwright';
 import { spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
-const SCREENSHOTS_DIR = '/Users/brkn/untracx/docs/screenshots';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const ROOT_DIR = path.resolve(__dirname, '../..');
+const SCREENSHOTS_DIR = path.join(ROOT_DIR, 'docs', 'screenshots');
 fs.mkdirSync(SCREENSHOTS_DIR, { recursive: true });
 
 // Start vite dev server
 const vite = spawn('npm', ['run', 'dev'], {
-  cwd: '/Users/brkn/untracx/gui/frontend',
+  cwd: __dirname,
   stdio: 'pipe',
+  shell: true,
 });
 
 await new Promise((resolve) => {
   vite.stdout.on('data', (data) => {
-    if (data.toString().includes('ready in')) resolve();
+    if (data.toString().includes('ready in') || data.toString().includes('Local:')) resolve();
   });
-  setTimeout(resolve, 2500);
+  setTimeout(resolve, 3000);
 });
 
 console.log('Vite server running...');
@@ -31,8 +36,8 @@ async function createPage(width = 920, height = 700) {
   const page = await context.newPage();
 
   await page.addInitScript(() => {
-    window.__TAURI_INTERNALS__ = {
-      invoke: async (cmd, args = {}) => {
+    (window as any).__TAURI_INTERNALS__ = {
+      invoke: async (cmd: string, args: any = {}) => {
         if (cmd === 'helper_status') {
           return {
             running: true,
@@ -79,13 +84,13 @@ peer: 8kMN2pQrStUvWxYzAbCdEfGhIjKlMnOpQrStUvWxYz4=
         if (cmd === 'peer_add') {
           return {
             ok: true,
-            output: `Sunucuda çalıştırmak için: sudo untracx-add-peer ${args.name}`,
+            output: `To run on server: sudo untracx-add-peer ${args.name}`,
           };
         }
         if (cmd === 'peer_remove') {
           return {
             ok: true,
-            output: `Sunucuda çalıştırmak için: sudo untracx-remove-peer ${args.name}`,
+            output: `To run on server: sudo untracx-remove-peer ${args.name}`,
           };
         }
         if (cmd === 'keygen') {
@@ -144,7 +149,7 @@ PersistentKeepalive = 25`,
   await page.goto('http://localhost:5173');
   await page.waitForSelector('.app');
 
-  // Add stylish macOS traffic-light window frame
+  // Add clean modern traffic-light window frame
   await page.evaluate(() => {
     const titleBar = document.createElement('div');
     titleBar.id = 'mac-titlebar';
@@ -152,8 +157,8 @@ PersistentKeepalive = 25`,
       display: flex;
       align-items: center;
       padding: 10px 16px;
-      background: #12141c;
-      border-bottom: 1px solid #232738;
+      background: #101216;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
       user-select: none;
       -webkit-user-select: none;
     `;
@@ -163,7 +168,7 @@ PersistentKeepalive = 25`,
         <span style="width: 11px; height: 11px; border-radius: 50%; background: #ffbd2e; display: inline-block;"></span>
         <span style="width: 11px; height: 11px; border-radius: 50%; background: #27c93f; display: inline-block;"></span>
       </div>
-      <div style="flex: 1; text-align: center; font-size: 12px; font-weight: 500; color: #8b8fa3; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; letter-spacing: -0.01em;">
+      <div style="flex: 1; text-align: center; font-size: 12px; font-weight: 500; color: #9496a1; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; letter-spacing: -0.01em;">
         untracx — WireGuard GUI &amp; Zero-Trust Manager
       </div>
       <div style="width: 60px;"></div>
@@ -174,54 +179,54 @@ PersistentKeepalive = 25`,
   return { page, context };
 }
 
-// 1. Status Panel (Durum)
+// 1. Status Panel
 console.log('Capturing: 01_status_panel.png');
 {
   const { page, context } = await createPage(940, 580);
   await page.click('#tab-status');
   await page.waitForTimeout(300);
-  await page.screenshot({ path: `${SCREENSHOTS_DIR}/01_status_panel.png` });
+  await page.screenshot({ path: path.join(SCREENSHOTS_DIR, '01_status_panel.png') });
   await context.close();
 }
 
-// 2. Connection Panel (Bağlantı)
+// 2. Connection Panel
 console.log('Capturing: 02_connection_panel.png');
 {
   const { page, context } = await createPage(940, 520);
   await page.click('#tab-connection');
   await page.waitForTimeout(200);
-  await page.click('button:has-text("Bağlan")');
+  await page.click('button:has-text("Connect Tunnel")');
   await page.waitForTimeout(300);
-  await page.screenshot({ path: `${SCREENSHOTS_DIR}/02_connection_panel.png` });
+  await page.screenshot({ path: path.join(SCREENSHOTS_DIR, '02_connection_panel.png') });
   await context.close();
 }
 
-// 3. Peer Management (Yönetim)
+// 3. Peer Management
 console.log('Capturing: 03_peer_management.png');
 {
   const { page, context } = await createPage(940, 680);
   await page.click('#tab-management');
   await page.waitForTimeout(200);
   await page.fill('input[placeholder*="macbook"]', 'macbook-pro');
-  await page.click('button:has-text("Komut Üret")');
+  await page.click('button:has-text("Generate Command")');
   await page.waitForTimeout(300);
-  await page.screenshot({ path: `${SCREENSHOTS_DIR}/03_peer_management.png` });
+  await page.screenshot({ path: path.join(SCREENSHOTS_DIR, '03_peer_management.png') });
   await context.close();
 }
 
-// 4. Key Management & Generation (Anahtarlar)
+// 4. Key Management & Generation
 console.log('Capturing: 04_key_management.png & 05_config_generator.png');
 {
   const { page, context } = await createPage(940, 1340);
   await page.click('#tab-keys');
   await page.waitForTimeout(200);
-  await page.click('button:has-text("Yeni Anahtar Çifti Üret")');
+  await page.click('button:has-text("Generate New Key Pair")');
   await page.waitForTimeout(200);
 
   const privInputs = await page.$$('input[type="password"]');
   if (privInputs.length > 0) {
     await privInputs[0].fill('aB3+dEfGhIjKlMnOpQrStUvWxYz0123456789ABCDEF=');
-    await page.click('button:has-text("Türet")');
+    await page.click('button:has-text("Derive")');
     await page.waitForTimeout(200);
   }
   if (privInputs.length > 1) {
@@ -230,38 +235,38 @@ console.log('Capturing: 04_key_management.png & 05_config_generator.png');
 
   await page.fill('input[placeholder="X25519 public key (base64)"]', 'sErVeRPuBlIcKeY123456789012345678901234567=');
   await page.fill('input[placeholder="10.0.0.1"]', '198.51.100.1');
-  await page.click('button:has-text("Config Üret")');
+  await page.click('button:has-text("Generate Profile")');
   await page.waitForTimeout(300);
 
   // Full Keys view (Hero screenshot)
-  await page.screenshot({ path: `${SCREENSHOTS_DIR}/04_keys_and_config_full.png` });
-  await page.screenshot({ path: '/Users/brkn/untracx/docs/gui-screenshot.png' });
+  await page.screenshot({ path: path.join(SCREENSHOTS_DIR, '04_keys_and_config_full.png') });
+  await page.screenshot({ path: path.join(ROOT_DIR, 'docs', 'gui-screenshot.png') });
 
   // Keygen card specific
   const keyCard = await page.$('.card:nth-of-type(1)');
   if (keyCard) {
-    await keyCard.screenshot({ path: `${SCREENSHOTS_DIR}/04_key_management.png` });
+    await keyCard.screenshot({ path: path.join(SCREENSHOTS_DIR, '04_key_management.png') });
   }
 
   // Config card specific
   const configCard = await page.$('.card:nth-of-type(2)');
   if (configCard) {
-    await configCard.screenshot({ path: `${SCREENSHOTS_DIR}/05_config_generator.png` });
+    await configCard.screenshot({ path: path.join(SCREENSHOTS_DIR, '05_config_generator.png') });
   }
 
   await context.close();
 }
 
-// 5. Settings Panel (Ayarlar)
+// 5. Settings Panel
 console.log('Capturing: 06_settings_panel.png');
 {
   const { page, context } = await createPage(940, 520);
   await page.click('#tab-settings');
   await page.waitForTimeout(200);
   await page.fill('input[value=""]', '198.51.100.1');
-  await page.click('button:has-text("Kaydet")');
+  await page.click('button:has-text("Save Changes")');
   await page.waitForTimeout(300);
-  await page.screenshot({ path: `${SCREENSHOTS_DIR}/06_settings_panel.png` });
+  await page.screenshot({ path: path.join(SCREENSHOTS_DIR, '06_settings_panel.png') });
   await context.close();
 }
 

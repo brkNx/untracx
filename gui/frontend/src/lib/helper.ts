@@ -17,7 +17,7 @@ async function invokeCommand<T>(command: string, args?: Record<string, unknown>)
     const res = await invoke<T>(command, args);
     if (res && typeof res === 'object' && 'ok' in res && (res as { ok: boolean }).ok === false) {
       const errObj = res as { error?: string };
-      throw new Error(errObj.error || 'İşlem başarısız oldu');
+      throw new Error(errObj.error || 'Operation failed');
     }
     return res;
   } catch (error) {

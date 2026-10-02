@@ -20,6 +20,8 @@ export interface VpnStatus {
 
 export interface Peer {
   publicKey: string;
+  name?: string;
+  endpoint?: string;
 }
 
 export interface PeerListResult {

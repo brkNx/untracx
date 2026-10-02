@@ -51,16 +51,16 @@ pub fn render(cfg: &ClientConfig) -> Result<String, String> {
     Ok(out)
 }
 
-/// Üretilen config'e satır/sembol enjeksiyonunu (ör. `PostUp = ...` → root RCE)
-/// ve geçersiz değerleri engellemek için tüm alanları sıkı doğrular.
+/// Strictly validates all fields to prevent line/symbol injection
+/// (e.g. `PostUp = ...` -> root RCE) and invalid values into the rendered config.
 pub fn validate(cfg: &ClientConfig) -> Result<(), String> {
     if cfg.client_private.is_empty() {
-        return Err("client-private zorunlu (önce: untracx keygen)".into());
+        return Err("client-private is required (run: untracx keygen first)".into());
     }
     crate::keys::validate_private(cfg.client_private)?;
 
     if cfg.server_public.is_empty() {
-        return Err("server-public zorunlu".into());
+        return Err("server-public is required".into());
     }
     crate::keys::validate_public(cfg.server_public)?;
 
@@ -73,49 +73,49 @@ pub fn validate(cfg: &ClientConfig) -> Result<(), String> {
 
     if !valid_ip(cfg.server_ip) {
         return Err(format!(
-            "server-ip geçersiz (IP adresi girin, DNS adı değil): {}",
+            "server-ip is invalid (enter an IP address, not a DNS hostname): {}",
             cfg.server_ip
         ));
     }
 
     let (ip, prefix) = cfg.client_ip.split_once('/').ok_or_else(|| {
         format!(
-            "client-ip CIDR olmalı (ör. 10.66.66.2/32): {}",
+            "client-ip must be CIDR (e.g. 10.66.66.2/32): {}",
             cfg.client_ip
         )
     })?;
     if !valid_ip(ip) {
-        return Err(format!("client-ip geçersiz: {}", cfg.client_ip));
+        return Err(format!("client-ip is invalid: {}", cfg.client_ip));
     }
     let prefix: u8 = prefix
         .parse()
-        .map_err(|_| format!("client-ip alt ağ maskesi geçersiz: {}", cfg.client_ip))?;
+        .map_err(|_| format!("client-ip subnet mask is invalid: {}", cfg.client_ip))?;
     let max_prefix = if ip.contains(':') { 128 } else { 32 };
     if prefix == 0 || prefix > max_prefix {
-        return Err(format!("client-ip maskesi aralık dışı: {}", cfg.client_ip));
+        return Err(format!("client-ip prefix length out of range: {}", cfg.client_ip));
     }
 
     for d in cfg.dns.split(',') {
         let d = d.trim();
         if d.is_empty() || !valid_ip(d) {
             return Err(format!(
-                "dns geçersiz (virgülle ayrılmış IP'ler): {}",
+                "dns is invalid (comma-separated IP addresses): {}",
                 cfg.dns
             ));
         }
     }
 
     if !(576..=1500).contains(&cfg.mtu) {
-        return Err(format!("mtu 576-1500 aralığında olmalı: {}", cfg.mtu));
+        return Err(format!("mtu must be between 576 and 1500: {}", cfg.mtu));
     }
     if cfg.port == 0 {
-        return Err("port 0 olamaz".into());
+        return Err("port cannot be 0".into());
     }
     Ok(())
 }
 
 fn valid_ip(s: &str) -> bool {
-    // Boşluk/whitespace içeren değerler asla geçerli sayılmaz.
+    // Values containing leading/trailing or embedded whitespace are never valid.
     if s.trim() != s || s.contains(char::is_whitespace) {
         return false;
     }
