@@ -13,7 +13,7 @@ name = "untracx"
 path = "src/main.rs"
 
 [dependencies]
-x25519-dalek = { version = "2", features = ["static_secrets"] }
+x25519-dalek = { version = "3", features = ["static_secrets"] }
 rand = "0.8"
 base64 = "0.22"
 clap = { version = "4", features = ["derive"] }
