@@ -1,142 +1,154 @@
 # untracx
 
-Untracx, kişisel kullanım için güvenli, doğrulanabilir ve sürdürülebilir bir WireGuard VPN çözümüdür. Öncelikli odak; hatasız sunucu kurulumu, güvenli anahtar ve profil provizyonu ve resmi WireGuard istemcilerine sorunsuz profil aktarımıdır.
+**untracx** is a secure, verifiable, and sustainable personal WireGuard VPN solution. It focuses on foolproof automated server provisioning, zero-trust cryptographic key management, recursive DNS protection with Unbound, and seamless profile deployment to official WireGuard clients and the custom desktop GUI.
 
 ---
 
-## 1. Desteklenen Platform Matrisi (v1)
+## 1. Supported Platform Matrix (v1)
 
-| Katman | Platform / Ortam | Destek Durumu | Notlar |
+| Layer | Platform / Environment | Status | Notes |
 |---|---|---|---|
-| **Sunucu** | Ubuntu 22.04 / 24.04 LTS (x86_64 & arm64) | **Destekleniyor (Stable)** | Otomatik bootstrap (`setup.sh`), Unbound DNS, UFW, fail2ban, atomik peer yönetimi. |
-| **İstemci Provizyonu** | Resmi WireGuard İstemcileri (macOS, Windows, Linux, iOS, Android) | **Destekleniyor (Stable)** | Standart `.conf` profil üretimi, QR kod aktarımı, Zero-Trust anahtar desteği. |
-| **Masaüstü GUI** | macOS / Windows / Linux (Tauri 2 + React) | **Beta / Profil Yöneticisi** | Anahtar üretimi, Zero-Trust konfigürasyon oluşturma, profil kaydetme (0600) ve ayarlar. |
-| **Yerel Kill-Switch** | Linux (nftables) | **Beta** | `inet` fail-closed output filtresi (`policy drop`), DHCP/tünel istisnaları. |
-| **Yerel Kill-Switch** | macOS (`pf`) / Windows (WFP) | **Deneysel (Experimental)** | Resmi WireGuard uygulamasının yerel `AllowedIPs = 0.0.0.0/0, ::/0` sızıntı engellemesi önerilir. |
+| **Server** | Ubuntu 22.04 / 24.04 LTS (x86_64 & arm64) | **Supported (Stable)** | Automated bootstrap (`setup.sh`), recursive Unbound DNS, UFW, fail2ban, atomic peer management. |
+| **Client Provisioning** | Official WireGuard Clients (macOS, Windows, Linux, iOS, Android) | **Supported (Stable)** | Standard `.conf` generation, QR code export, Zero-Trust client-side key generation. |
+| **Desktop GUI** | macOS / Windows / Linux (Tauri 2 + React) | **Beta / Profile Manager** | Key generation, Zero-Trust config builder, atomic profile storage (`0600`), live interface stats. |
+| **Local Kill-Switch** | Linux (nftables) | **Beta** | `inet` fail-closed output filtering (`policy drop`), DHCP/tunnel exemptions. |
+| **Local Kill-Switch** | macOS (`pf`) / Windows (WFP) | **Experimental** | Official WireGuard client's native `AllowedIPs = 0.0.0.0/0, ::/0` leak protection recommended. |
 
 ---
 
-## 2. Masaüstü GUI ve Arayüz Görünümü
+## 2. Desktop GUI & User Interface
 
-Untracx, **Tauri 2 + React 18 + TypeScript** altyapısıyla geliştirilmiş yerel masaüstü arayüzüne sahiptir. Özel anahtarlarınızı güvenle üretmenizi, istemci konfigürasyonlarını atomik olarak (`0600` dosya izinleriyle) kaydetmenizi ve tünel durumunu izlemenizi sağlar.
+untracx features a native desktop GUI built with **Tauri 2 + React 18 + TypeScript**. It allows you to securely generate keys, compose client configurations, persist profiles atomically with `0600` permissions, and inspect tunnel status.
 
 <p align="center">
-  <img src="docs/gui-screenshot.png" alt="Untracx GUI Overview" width="850">
+  <img src="docs/gui-screenshot.png" alt="untracx GUI Overview" width="850">
 </p>
 
-### 📸 Modül Ekran Görüntüleri
+### 📸 Module Screenshots
 
-| Modül | Ekran Görüntüsü | Açıklama |
+| Module | Screenshot | Description |
 |---|---|---|
-| **1. Durum (Status)** | <img src="docs/screenshots/01_status_panel.png" width="380" alt="WireGuard Durumu"> | Aktif arayüz, handshake süresi, transfer edilen veri ve canlı bağlantı durumu. |
-| **2. Bağlantı (Connection)** | <img src="docs/screenshots/02_connection_panel.png" width="380" alt="VPN Bağlantısı"> | Konfigürasyon dosyasından tek tıkla bağlantı başlatma ve bağlantıyı kesme. |
-| **3. Yönetim (Peer Management)** | <img src="docs/screenshots/03_peer_management.png" width="380" alt="Peer Yönetimi"> | Kayıtlı cihaz genel anahtarları, cihaz ekleme ve iptal komutları. |
-| **4. Anahtar Yönetimi (Keys)** | <img src="docs/screenshots/04_key_management.png" width="380" alt="Anahtar Yönetimi"> | X25519 Curve25519 anahtar çifti üretimi, genel anahtar türetme ve doğrulama. |
-| **5. Config Üretici (Generator)** | <img src="docs/screenshots/05_config_generator.png" width="380" alt="Config Üretici"> | İstemci parametreleriyle standart WireGuard `.conf` üretimi ve atomik kaydetme. |
-| **6. Ayarlar (Settings)** | <img src="docs/screenshots/06_settings_panel.png" width="380" alt="Ayarlar Paneli"> | Varsayılan profil yolları, arayüz adı ve sunucu endpoint yapılandırması. |
+| **1. Status** | <img src="docs/screenshots/01_status_panel.png" width="380" alt="WireGuard Status"> | Active interface, handshake timestamps, data transfer stats, and live connectivity status. |
+| **2. Connection** | <img src="docs/screenshots/02_connection_panel.png" width="380" alt="VPN Connection"> | One-click tunnel connection and disconnection from configuration files. |
+| **3. Management** | <img src="docs/screenshots/03_peer_management.png" width="380" alt="Peer Management"> | Registered device public keys, peer additions, and atomic revocation commands. |
+| **4. Keys** | <img src="docs/screenshots/04_key_management.png" width="380" alt="Key Management"> | Curve25519 (X25519) keypair generation, public key derivation, and validation. |
+| **5. Generator** | <img src="docs/screenshots/05_config_generator.png" width="380" alt="Config Generator"> | Standard WireGuard `.conf` generation with custom endpoints and atomic export. |
+| **6. Settings** | <img src="docs/screenshots/06_settings_panel.png" width="380" alt="Settings Panel"> | Default profile directory paths, interface names, and server endpoint configuration. |
 
 ---
 
-## 3. Güvenlik ve Gizlilik Prensipleri (Ne Sağlar, Ne Sağlamaz?)
+## 3. Security & Privacy Principles
 
-### Sağlanan Güvenlik
-- **Güçlü Şifreleme**: WireGuard (Noise Protocol Framework, Curve25519, ChaCha20-Poly1305, BLAKE2s) ile uçtan uca şifreleme.
-- **Kuantum Sonrası Güvenlik (PSK)**: Tüm peer'lar için opsiyonel ve sunucu tarafında zorunlu 256-bit Pre-shared Key (PSK) koruması.
-- **Özel DNS Resolver**: Sunucu içinde Unbound recursive DNS resolver (`10.66.66.1:53`). Yalnızca WireGuard tüneli içinden erişilebilir, dış internete kapalıdır.
-- **Güvenli Dosya İşlemleri**: Özel anahtarlar bellekten anında silinir (`Zeroize`), konfigürasyon dosyaları diskte `0600` izinleri, `O_NOFOLLOW` ve atomik temp+rename ile yazılır.
-- **Zero-Trust Anahtar Üretimi**: İstemci özel anahtarı istemci cihazında üretilir; sunucu istemcinin özel anahtarını bilmez ve depolamaz.
+### Guarantees Provided
+- **State-of-the-Art Encryption**: WireGuard protocol (Noise Protocol Framework, Curve25519, ChaCha20-Poly1305, BLAKE2s) for peer-to-peer authenticated encryption.
+- **Post-Quantum Guard (PSK)**: 256-bit Pre-shared Key (PSK) support across all peers for forward secrecy.
+- **Private In-Tunnel DNS Resolver**: Dedicated internal Unbound recursive DNS resolver (`10.66.66.1:53`) with DNSSEC validation and QNAME minimization. Blocked from public internet queries.
+- **Zeroize Memory Clearing**: Private keys and PSKs are scrubbed immediately from RAM after use via the `Zeroize` trait.
+- **Atomic File Operations**: Config files are written using `0600` file permissions, `O_NOFOLLOW` symlink guards, and atomic temporary-file-and-rename semantics (`fs_util::write_secret_file_atomic`).
+- **Zero-Trust Provisioning**: Client private keys can be generated purely on the client device; the server never sees or stores client private keys.
 
-### Sınırlar ve Bilinen Kısıtlar
-- **Anonimlik Sağlamaz**: VPN servis sağlayıcısı (örn. Oracle Cloud) veya hedef internet servisleri çıkış IP'nizi ve bağlantı zaman damgalarını görebilir.
-- **Coğrafi Konum**: Çıkış IP'si sunucunun barındığı veri merkezine aittir (Türkiye/Azerbaycan çıkışı için o ülkelerde sunucu gerekir).
-- **Yerel Sızıntılar**: İşletim sistemi düzeyinde kill-switch aktif edilmeden veya resmi istemci kullanılmadan tünel çökmesi durumunda yerel trafik sızabilir.
+### Threat Model Boundaries
+- **No Absolute Anonymity**: Upstream network providers (e.g., Oracle Cloud, VPS host) and destination endpoints can observe server egress traffic and timestamps.
+- **Server Geolocation**: Public egress IP reflects the data center hosting the server.
+- **Local Leak Risks**: Unless an OS-level kill-switch or official WireGuard on-demand routing is active, abrupt tunnel interruptions could lead to unencrypted traffic.
 
 ---
 
-## 4. Sunucu Kurulumu (Ubuntu 22.04 / 24.04)
+## 4. Server Deployment (Oracle Cloud / VPS / Ubuntu)
 
-### 4.1 Ön Gereksinimler ve OCI Güvenlik Listesi
-Kurulum yapılacak sunucuda aşağıdaki portların açık olması gerekir:
-- **SSH (TCP 22)**: Mümkünse yalnızca yönetim yapacağınız statik IP'ye açık olmalıdır.
-- **WireGuard (UDP 51820)**: İstemcilerin bağlanabilmesi için genel erişime açık olmalıdır.
-- **DNS (TCP/UDP 53)**: Dış internete **kesinlikle açılmamalıdır** (setup script'i tünel içinden otomatik izin verir).
+### 4.1 Prerequisites & Firewall
+Ensure the following ports are open on your host / cloud network:
+- **SSH (TCP 22)**: Management port (restrict to your static IP when possible).
+- **WireGuard (UDP 51820)**: Public VPN ingress port (open to `0.0.0.0/0`).
+- **DNS (TCP/UDP 53)**: **Never open to the public internet**; handled internally over the tunnel (`10.66.66.1`).
 
-### 4.2 Otomatik Kurulum (Oracle Cloud / OCI ve Uzak Sunucu)
-Detaylı OCI güvenlik listesi rehberi için [docs/oracle-deployment.md](docs/oracle-deployment.md) dosyasına göz atın.
+> **Oracle Cloud (OCI) Users:** Remember to add an Ingress Rule in your VCN Security List for `UDP 51820`. Detailed guide: [docs/oracle-deployment.md](docs/oracle-deployment.md).
 
-**Tek Komutla Dağıtım:**
+---
+
+### 4.2 Automated Deployment (One-Command)
+
+Deploy from your local machine to your remote server over SSH:
+
+#### Linux / macOS (Bash)
 ```bash
-# Linux / macOS (Bash)
-bash scripts/deploy-oracle.sh oracle pc-brk
-
-# Windows (PowerShell)
-.\scripts\deploy-oracle.ps1 -Target oracle -Peer pc-brk
+# Deploy server and automatically provision initial client config:
+bash scripts/deploy-oracle.sh oracle pc-client
 ```
 
-### 4.3 Manuel Kurulum Adımları
-Sunucu dosyalarını sunucuya aktarın:
-```bash
-scp -r server ubuntu@<SUNUCU_IP>:/tmp/untracx-server
-ssh ubuntu@<SUNUCU_IP>
+#### Windows (PowerShell)
+```powershell
+# Deploy server and automatically provision initial client config:
+.\scripts\deploy-oracle.ps1 -Target oracle -Peer pc-client
 ```
 
-Sunucu üzerinde bootstrap scriptini çalıştırın:
+---
+
+### 4.3 Manual Deployment
+
+Transfer the server bundle to the target server:
+```bash
+scp -r server ubuntu@<SERVER_IP>:/tmp/untracx-server
+ssh ubuntu@<SERVER_IP>
+```
+
+Run the server bootstrap script:
 ```bash
 cd /tmp/untracx-server
-sudo PUBLIC_ENDPOINT=<SUNUCU_IP> bash setup.sh
+sudo PUBLIC_ENDPOINT=<SERVER_IP> bash setup.sh
 ```
 
 ---
 
-## 5. Peer Yönetimi (Cihaz Ekleme & Silme)
+## 5. Peer Management
 
-### 5.1 Standart Profil Oluşturma (Sunucu Taraflı)
+### 5.1 Standard Profile Provisioning (Server-Side)
 ```bash
 sudo untracx-add-peer macbook
 ```
-Oluşturulan `~/untracx-macbook.conf` dosyasını bilgisayarınıza indirin ve resmi WireGuard uygulamasına aktarın:
+Download the resulting `~/untracx-macbook.conf` to your client device:
 ```bash
-scp ubuntu@<SUNUCU_IP>:~/untracx-macbook.conf .
-ssh ubuntu@<SUNUCU_IP> 'rm -f ~/untracx-macbook.conf'
+scp ubuntu@<SERVER_IP>:~/untracx-macbook.conf .
+ssh ubuntu@<SERVER_IP> 'rm -f ~/untracx-macbook.conf'
 ```
 
-### 5.2 Zero-Trust Profil Ekleme (İstemci Anahtarlı)
-İstemcide üretilen genel anahtar ile sunucuda peer kaydı açma:
+### 5.2 Zero-Trust Provisioning (Client-Side Key)
+Register a peer using a public key generated on the client:
 ```bash
-sudo untracx-add-peer telefon <CLIENT_PUBLIC_KEY> [PRESHARED_KEY]
+sudo untracx-add-peer phone <CLIENT_PUBLIC_KEY> [PRESHARED_KEY]
 ```
-Bu modda sunucuda hiçbir zaman istemci özel anahtarı bulunmaz.
+The client's private key never leaves the client device.
 
-### 5.3 Cihaz İptal Etme (Revocation)
+### 5.3 Peer Revocation
 ```bash
 sudo untracx-remove-peer macbook
 ```
-Sunucu konfigürasyonu atomik olarak güncellenir, hedef peer anında tünelden düşürülür ve manuel peer kayıtları korunur.
+The server atomically strips the peer configuration, flushes live WireGuard routing table entries, and preserves any existing peer records.
 
 ---
 
-## 6. Doğrulama ve Test Suite'i
+## 6. Verification & Test Suite
 
-### 6.1 Yerel Kalite ve Güvenlik Testleri
+### 6.1 Local Quality & Security Checks
 ```bash
-# Tüm kontrolleri çalıştır (Rust, Shell, Frontend, Fixture Testleri)
+# Run all checks (Rust Core, Shell scripts, GUI checks, Fixtures, and Audits)
 bash scripts/check.sh
 ```
 
-### 6.2 Gerçek Cihaz Bağlantı Testi
+### 6.2 Live End-to-End Connection Test
 ```bash
-export UNTRACX_SERVER=<SUNUCU_IP>
+export UNTRACX_SERVER=<SERVER_IP>
 bash scripts/test-connection.sh testclient
 ```
-Bu test:
-1. Sunucuda güvenli geçici test peer'ı oluşturur.
-2. Tüneli ayağa kaldırır.
-3. IPv4 çıkış IP'sini, Unbound DNS çözümlemesini ve sayısal handshake zaman damgasını doğrular.
-4. Test bitiminde istemci ve sunucudaki tüm geçici kayıtları temizler.
+This automated test:
+1. Provisions an ephemeral peer on the server.
+2. Initiates the local WireGuard tunnel.
+3. Tests IPv4 egress match, internal Unbound DNS resolution, and numeric handshake freshness.
+4. Atomically cleans up all temporary configurations.
 
 ---
 
-## 7. Geliştirici & Lisans
+## 7. Tech Stack & License
 
-- **Lisans**: MIT
-- **Teknoloji**: Rust 2021, Tauri 2, React 18, TypeScript, Vite, WireGuard.
+- **License**: MIT
+- **Technologies**: Rust 2021, Tauri 2, React 18, TypeScript, Vite, WireGuard.

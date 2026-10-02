@@ -1,61 +1,66 @@
-# Oracle Cloud (OCI) Kurulum ve Sorun Giderme Rehberi
+# Oracle Cloud Infrastructure (OCI) Reference & Troubleshooting
 
 ---
 
-## 1. Always Free Kaynak Uygunluğu
+## 1. Always Free Tier Eligibility
 
-Oracle Cloud Infrastructure (OCI) Always Free katmanında ücretsiz kaynaklar şunlardır:
+Oracle Cloud Infrastructure (OCI) Always Free tier includes:
 - **x86_64**: `VM.Standard.E2.1.Micro` (1 OCPU, 1 GB RAM).
-- **Arm (Ampere)**: `VM.Standard.A1.Flex` (4 OCPU'ya ve 24 GB RAM'e kadar ücretsiz).
-- **Boot Volume**: 200 GB'a kadar toplam blok depolama.
+- **Arm (Ampere)**: `VM.Standard.A1.Flex` (up to 4 OCPUs and 24 GB RAM free).
+- **Boot Volume**: Up to 200 GB total block storage.
 
-> **Önemli**: OCI Console üzerinde kaynak oluştururken **"Always Free Eligible"** rozetini mutlaka doğrulayın. Bütçe aşımını önlemek için *Billing & Cost Management* menüsünden bütçe ve e-posta alarmı kurmanız şiddetle önerilir.
+> [!TIP]
+> Always verify the **"Always Free Eligible"** badge when creating compute instances in the OCI Console. Setting up a budget alarm in *Billing & Cost Management* is recommended to prevent accidental charges.
 
 ---
 
-## 2. OCI Ağ Güvenlik Kuralları (Ingress / Egress)
+## 2. OCI Network Security Architecture (Two-Tier)
 
-OCI sanal bulut ağlarında iki kademeli güvenlik mekanizması bulunur:
-1. **VCN Security List / Network Security Group (NSG)**: OCI bulut katmanı.
-2. **UFW / iptables**: Ubuntu VM içi işletim sistemi güvenlik duvarı.
+OCI Virtual Cloud Networks operate with two firewall tiers:
+1. **Cloud Tier**: VCN Security List / Network Security Group (NSG).
+2. **Host Tier**: Operating system firewall inside the VM (`UFW` / `iptables`).
 
-### Gerekli Ingress Kuralları:
+### Required Ingress Rules:
 
-| Protokol | Port | Kaynak (Source CIDR) | Açıklama |
+| Protocol | Port | Source CIDR | Description |
 |---|---|---|---|
-| **TCP** | `22` | Kendi Statik IP'niz `/32` | SSH erişimi (mümkünse 0.0.0.0/0 açmayın). |
-| **UDP** | `51820` | `0.0.0.0/0` | WireGuard tünel ingress portu. |
+| **TCP** | `22` | Your Static IP `/32` (or restricted CIDR) | SSH administration. |
+| **UDP** | `51820` | `0.0.0.0/0` | WireGuard VPN tunnel ingress. |
 
-> **UYARI**: Port 53 (DNS) için OCI Security List'e **kesinlikle genel internet ingress kuralı eklemeyin**. Unbound yalnızca WireGuard tünel arayüzü (`10.66.66.1`) üzerinden hizmet verir.
-
----
-
-## 3. SSH Bağlantı ve Zaman Aşımı Sorunları
-
-Eğer `ssh: connect to host ... port 22: Operation timed out` hatası alıyorsanız:
-
-1. **Instance Durumu**: OCI Console'da instance'ın `RUNNING` durumunda olduğunu teyit edin.
-2. **Public IP**: Instance'a bağlı VNIC üzerinde Public IPv4 adresi atandığından emin olun.
-3. **Security List**: İlgili subnet'in Security List veya NSG kurallarında TCP 22 ingress izni olduğunu kontrol edin.
-4. **OCI Virtual Router / IGW**: VCN Route Table içinde `0.0.0.0/0` rotasının Internet Gateway'e (IGW) yönlendirildiğini doğrulayın.
-5. **Console Connection**: SSH tamamen kilitlendiyse OCI Console'dan *Console Connection / Cloud Shell* başlatarak serial bağlantı ile erişim sağlayabilirsiniz.
+> [!CAUTION]
+> **Never open Port 53 (DNS) to the public internet** in your OCI Security List. Unbound operates strictly within the WireGuard interface subnet (`10.66.66.1`).
 
 ---
 
-## 4. Kurulum Sonrası Servis Sağlık Denetimi
+## 3. SSH Connectivity & Timeout Troubleshooting
 
-Sunucuda kurulum yapıldıktan sonra servisleri doğrulayın:
+If you encounter `ssh: connect to host ... port 22: Operation timed out`:
+
+1. **Instance Lifecycle**: Confirm the instance status in the OCI Console is `RUNNING`.
+2. **Public IP**: Ensure an Ephemeral or Reserved Public IPv4 is attached to the primary VNIC.
+3. **Security List**: Confirm the VCN Security List has an ingress rule permitting TCP port 22.
+4. **Internet Gateway**: Ensure the VCN Route Table directs default route `0.0.0.0/0` to the Internet Gateway (IGW).
+5. **Console Connection**: If SSH is unreachable, open a serial *Cloud Shell / Console Connection* directly from the OCI instance page to recover access.
+
+---
+
+## 4. Post-Deployment Service Health Verification
+
+After running the deployment script, verify services on the instance:
 
 ```bash
-# WireGuard servis durumu
+# WireGuard interface status and handshakes
+sudo wg show wg0
+
+# WireGuard systemd service
 sudo systemctl status wg-quick@wg0 --no-pager
 
-# Dinleyen UDP portları
+# UDP listening socket
 sudo ss -lunp | grep 51820
 
-# DNS resolver durumu
+# Recursive DNS resolver
 sudo systemctl status unbound --no-pager
 
-# UFW kuralları
+# Host firewall status
 sudo ufw status verbose
 ```

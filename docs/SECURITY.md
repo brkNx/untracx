@@ -1,45 +1,45 @@
-# Güvenlik ve Tehdit Modeli (v1.2)
+# Security & Threat Model (v1.2)
 
 ---
 
-## 1. Güvenlik Tasarımı ve Kapsam
+## 1. Security Architecture & Guarantees
 
-Untracx, kişisel VPN trafiğini korumak amacıyla aşağıdaki güvenlik garantilerini sunar:
+untracx protects personal VPN traffic with the following verifiable cryptographic guarantees:
 
-### 1.1 Kriptografik İlkeler
-- **Protokol**: WireGuard (Noise IKpsk2 protokolü).
-- **Simetrik Şifreleme**: ChaCha20-Poly1305 AEAD.
-- **Anahtar Değişimi**: Curve25519 (X25519 ECDH).
-- **Hash Fonksiyonu**: BLAKE2s.
-- **Kuantum Sonrası Koruma**: 256-bit Pre-shared Key (PSK) ile peer izolasyonu ve ileriye dönük gizlilik (Forward Secrecy).
+### 1.1 Cryptographic Foundations
+- **Protocol**: WireGuard (Noise IKpsk2 protocol handshake).
+- **Symmetric Encryption**: ChaCha20-Poly1305 AEAD.
+- **Key Exchange**: Curve25519 (X25519 ECDH).
+- **Hashing**: BLAKE2s.
+- **Post-Quantum Forward Secrecy**: 256-bit Pre-shared Key (PSK) support providing isolation and quantum-resistant forward secrecy against future decrypt-later attacks.
 
-### 1.2 Bellek ve Dosya Güvenliği
-- **Zeroize Temizliği**: Özel anahtarlar, PSK değerleri ve hassas konfigürasyon metinleri kullanım sonrasında `Zeroize` ile bellekten silinir.
-- **Atomik ve Güvenli Dosya Yazımı**: Dosyalar `fs_util::write_secret_file_atomic` aracılığıyla `create_new(true)`, `0600` izinleri, `O_NOFOLLOW` bayrağı ve `fsync` ile aynı dosya sisteminde geçici dosya açılarak atomik yeniden adlandırmayla yazılır.
-- **Symlink ve TOCTOU Koruması**: Symlink saldırılarına karşı `O_NOFOLLOW` ve üst dizin izin denetimleri zorunlu tutulur.
-
----
-
-## 2. Tehdit Modeli
-
-### Korunan Tehditler (In-Scope)
-- **Yerel Ağ Dinleme**: Ortak Wi-Fi, otel veya havalimanı ağlarında pasif paket koklama ve ARP zehirlenmesi.
-- **ISP Trafik İzleme**: İnternet servis sağlayıcısının kullanıcı trafiğinin içeriğini ve ziyaret edilen IP'leri görmesi.
-- **DNS Manipülasyonu**: ISP veya yerel ağın DNS sorgularını sansürlemesi/yönlendirmesi (Unbound DNSSEC ve QNAME minimisation ile korunur).
-- **Cihaz Ayrımı**: Her peer için ayrı anahtar çifti ve PSK kullanıldığından bir cihazın kaybı diğer cihazları tehlikeye atmaz.
-
-### Kapsam Dışı Tehditler (Out-of-Scope)
-- **VPS Sağlayıcısı Güvenliği**: OCI hesabının veya sunucu root erişiminin ele geçirilmesi.
-- **İstemci Cihaz Güvenliği**: İstemci cihazdaki malware, keylogger veya işletim sistemi düzeyindeki casus yazılımlar.
-- **Gelişmiş Trafik Korelasyonu**: Global ağ düzeyinde paket boyut ve zaman korelasyonu yapan devlet düzeyindeki aktörler.
-- **Webview / Tarayıcı Takibi**: Çerezler, tarayıcı fingerprinting veya oturum açılmış kullanıcı hesapları.
+### 1.2 Memory & Storage Protection
+- **Zeroize Cleansing**: All private keys, PSKs, and decrypted sensitive buffers are cleared from system RAM via the `Zeroize` trait immediately upon drop.
+- **Atomic File Writing**: Secrets are written using `fs_util::write_secret_file_atomic` with `create_new(true)`, `0600` POSIX mode, `O_NOFOLLOW` flag, and atomic `rename` preceded by `fsync`.
+- **Symlink & TOCTOU Defense**: `O_NOFOLLOW` prevents symlink redirection and race conditions during file creation.
 
 ---
 
-## 3. Kill-Switch ve Sızıntı Sınırları
+## 2. Threat Model
 
-- `AllowedIPs = 0.0.0.0/0, ::/0` rotalaması normal çalışmada tüm trafiği tünele gönderir.
-- Tünelin beklenmedik şekilde çökmesi durumunda fiziksel arayüz sızıntısını engellemek için:
-  - **Linux**: `scripts/killswitch-linux.sh` (nftables `inet` tablosunda `policy drop`).
-  - **macOS / Windows**: Resmi WireGuard uygulamasının On-Demand ve entegre tünel rotalama mekanizması kullanılmalıdır.
-- Sızıntı testleri `scripts/test-connection.sh` ile doğrulanmalıdır.
+### Threats Protected Against (In-Scope)
+- **Local Network Eavesdropping**: Passive packet sniffing, ARP spoofing, and malicious Wi-Fi access points in cafes, hotels, and airports.
+- **ISP Traffic Inspection & Metadata Collection**: Prevents internet service providers from reading payload content, browsing destinations, and protocol patterns.
+- **DNS Hijacking & Censorship**: Unbound recursive DNS resolver with full DNSSEC validation and QNAME minimization prevents external DNS spoofing and query interception.
+- **Compromised Peer Isolation**: Separate keypairs and PSKs ensure that the compromise of one device does not expose traffic from other peers.
+
+### Threats Outside Scope (Out-of-Scope)
+- **Cloud Infrastructure Compromise**: Direct root access or hypervisor compromise by the cloud provider (e.g., OCI / VPS root).
+- **Client-Side Host Malware**: Kernel-level keyloggers, screen grabbers, or compromised client operating systems.
+- **Nation-State Global Traffic Analysis**: Advanced end-to-end packet timing and statistical flow correlation across global backbones.
+- **Browser Fingerprinting & Account Tracking**: Cookies, Canvas fingerprinting, or active browser logins.
+
+---
+
+## 3. Kill-Switch & Leak Boundaries
+
+- Setting `AllowedIPs = 0.0.0.0/0, ::/0` routes all standard system traffic through the WireGuard interface.
+- In the event of abrupt tunnel disconnects:
+  - **Linux**: Use `scripts/killswitch-linux.sh` (enforces nftables `inet` table `policy drop` with interface exemptions).
+  - **macOS / Windows**: Rely on official WireGuard client's native On-Demand tunnel routing and block untunneled traffic settings.
+- Verify leaks regularly using `scripts/test-connection.sh`.

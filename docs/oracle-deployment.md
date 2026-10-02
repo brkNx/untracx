@@ -1,93 +1,105 @@
 # Oracle Cloud Infrastructure (OCI) Deployment Guide
 
-Bu rehber, **untracx** WireGuard VPN sunucusunu Oracle Cloud (Always Free veya standart) Ubuntu Compute Instance üzerinde kurmak, yapılandırmak ve yönetmek için hazırlanmıştır.
+This guide details how to deploy, configure, and manage the **untracx** WireGuard VPN server on an Oracle Cloud Infrastructure (OCI) Compute Instance (supporting both Always Free and standard tiers, x86_64 & Ampere A1 ARM64).
 
 ---
 
-## 1. OCI Ağ ve Güvenlik Listesi Ayarı (Ingress Rule)
+## 1. OCI Network & Ingress Security Rules
 
-Oracle Cloud Sanal Bulut Ağları (VCN) varsayılan olarak yalnızca `TCP 22` portuna izin verir. WireGuard tünelinin çalışabilmesi için `UDP 51820` portuna izin verilmelidir.
+Oracle Cloud Virtual Cloud Networks (VCN) default to allowing only `TCP 22` (SSH). For WireGuard VPN traffic to pass through, `UDP 51820` must be permitted in the VCN Ingress Rules.
 
-1. **OCI Console** -> **Networking** -> **Virtual Cloud Networks (VCN)** bölümüne gidin.
-2. Sunucunuzun bağlı olduğu alt ağın (Subnet) **Default Security List** ayarlarına tıklayın.
-3. **Add Ingress Rules** butonuna tıklayın:
+### Adding the Ingress Rule:
+1. Log in to the **OCI Console**.
+2. Navigate to **Networking** -> **Virtual Cloud Networks (VCN)**.
+3. Select your VCN and click on the **Default Security List** (or your subnet's associated Security List / Network Security Group).
+4. Click **Add Ingress Rules**:
    - **Source CIDR:** `0.0.0.0/0`
    - **IP Protocol:** `UDP`
    - **Destination Port Range:** `51820`
-   - **Description:** `untracx WireGuard UDP port`
-4. Değişikliği kaydedin.
+   - **Description:** `untracx WireGuard UDP Ingress`
+5. Click **Add Ingress Rules** to save.
+
+> [!WARNING]
+> **Do not open Port 53 (DNS) to the public internet.** The Unbound recursive DNS resolver only listens on the internal WireGuard tunnel interface (`10.66.66.1:53`).
 
 ---
 
-## 2. SSH Bağlantı Yapılandırması
+## 2. SSH Configuration
 
-Yerel makinenizde `~/.ssh/config` dosyanıza Oracle sunucu bilginizi ekleyin:
+Configure SSH access in your local `~/.ssh/config` file:
 
 ```sshconfig
 Host oracle
-    HostName <ORACLE_PUBLIC_IP>
+    HostName <YOUR_ORACLE_PUBLIC_IP>
     User ubuntu
-    IdentityFile ~/.ssh/id_rsa_oracle
+    IdentityFile ~/.ssh/id_oracle.key
     ServerAliveInterval 30
     ServerAliveCountMax 3
 ```
 
-Bağlantıyı test edin:
+Verify connectivity:
 ```bash
 ssh oracle "uname -a"
 ```
 
 ---
 
-## 3. Otomatik Kurulum (Tek Komutla Dağıtım)
+## 3. Automated One-Command Deployment
 
-Projeyi yerel bilgisayarınızdan Oracle sunucunuza tek komutla kurabilirsiniz:
+You can deploy the complete untracx server and automatically fetch your initial client profile in one step from your local machine.
 
-### Linux / macOS:
+### Linux / macOS (Bash):
 ```bash
-# Sadece sunucu kurulumu:
+# Server setup only:
 bash scripts/deploy-oracle.sh oracle
 
-# Sunucu kurulumu + ilk cihaz profilini otomatik üretip indirme:
-bash scripts/deploy-oracle.sh oracle pc-brk
+# Server setup + automatically provision and download client profile:
+bash scripts/deploy-oracle.sh oracle pc-client
 ```
 
 ### Windows (PowerShell):
 ```powershell
-# Sadece sunucu kurulumu:
+# Server setup only:
 .\scripts\deploy-oracle.ps1 -Target oracle
 
-# Sunucu kurulumu + ilk cihaz profilini otomatik üretip indirme:
-.\scripts\deploy-oracle.ps1 -Target oracle -Peer pc-brk
+# Server setup + automatically provision and download client profile:
+.\scripts\deploy-oracle.ps1 -Target oracle -Peer pc-client
 ```
+
+The script will:
+1. Validate SSH connectivity and detect remote architecture (e.g., `aarch64` / `x86_64`).
+2. Upload the `server/` components to the instance.
+3. Run `setup.sh` to install WireGuard, Unbound DNS, UFW, and fail2ban.
+4. Verify OCI host firewall rules (`iptables` / `ufw`).
+5. Provision the client profile (if specified) and securely download `untracx-<peer>.conf` to your local folder.
 
 ---
 
-## 4. Cihaz Yönetimi (Peer Management)
+## 4. Peer Management (Adding & Revoking Devices)
 
-Kurulum tamamlandıktan sonra istediğiniz zaman yeni cihazlar ekleyebilir veya silebilirsiniz:
+Once deployed, you can manage devices at any time over SSH:
 
-### Yeni Cihaz Profili Üretme:
+### Add a New Device:
 ```bash
-ssh oracle "sudo untracx-add-peer telefon"
-scp oracle:~/untracx-telefon.conf ./
-ssh oracle "rm -f ~/untracx-telefon.conf"
+ssh oracle "sudo untracx-add-peer my-phone"
+scp oracle:~/untracx-my-phone.conf ./
+ssh oracle "rm -f ~/untracx-my-phone.conf"
 ```
 
-### Cihazı İptal Etme (Revocation):
+### Revoke a Device:
 ```bash
-ssh oracle "sudo untracx-remove-peer telefon"
+ssh oracle "sudo untracx-remove-peer my-phone"
 ```
 
-### Sunucu Durumunu İzleme:
+### Check Server & Peer Status:
 ```bash
 ssh oracle "sudo wg show wg0"
 ```
 
 ---
 
-## 5. İstemcide Kullanım
+## 5. Client Connection
 
-Üretilen `.conf` dosyasını:
-- **Resmi WireGuard İstemcisi:** "Add Tunnel" -> `untracx-xxx.conf` seçerek doğrudan bağlanın.
-- **Untracx Desktop GUI:** Tauri arayüzü üzerinden "Import Profile" seçeneğiyle yükleyip tüneli başlatın.
+Import the generated `.conf` profile:
+- **Official WireGuard Client:** Click "Add Tunnel" -> select `untracx-<peer>.conf` -> Activate.
+- **Untracx Desktop GUI:** Use "Import Profile" in the Tauri application.
