@@ -26,7 +26,7 @@ await new Promise((resolve) => {
 
 console.log('Vite server running...');
 
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({ channel: 'msedge', headless: true });
 
 async function createPage(width = 920, height = 700) {
   const context = await browser.newContext({
@@ -36,8 +36,8 @@ async function createPage(width = 920, height = 700) {
   const page = await context.newPage();
 
   await page.addInitScript(() => {
-    (window as any).__TAURI_INTERNALS__ = {
-      invoke: async (cmd: string, args: any = {}) => {
+    window.__TAURI_INTERNALS__ = {
+      invoke: async (cmd, args = {}) => {
         if (cmd === 'helper_status') {
           return {
             running: true,
@@ -195,7 +195,7 @@ console.log('Capturing: 02_connection_panel.png');
   const { page, context } = await createPage(940, 520);
   await page.click('#tab-connection');
   await page.waitForTimeout(200);
-  await page.click('button:has-text("Connect Tunnel")');
+  await page.click('button:has-text("Connect")');
   await page.waitForTimeout(300);
   await page.screenshot({ path: path.join(SCREENSHOTS_DIR, '02_connection_panel.png') });
   await context.close();
@@ -220,22 +220,19 @@ console.log('Capturing: 04_key_management.png & 05_config_generator.png');
   const { page, context } = await createPage(940, 1340);
   await page.click('#tab-keys');
   await page.waitForTimeout(200);
-  await page.click('button:has-text("Generate New Key Pair")');
+
+  const keyCard = page.locator('.card').nth(0);
+  await keyCard.locator('button:has-text("Generate New Key Pair")').click();
+  await page.waitForTimeout(200);
+  await keyCard.locator('input[placeholder="X25519 private key (base64)"]').fill('aB3+dEfGhIjKlMnOpQrStUvWxYz0123456789ABCDEF=');
+  await keyCard.locator('button:has-text("Derive")').click();
   await page.waitForTimeout(200);
 
-  const privInputs = await page.$$('input[type="password"]');
-  if (privInputs.length > 0) {
-    await privInputs[0].fill('aB3+dEfGhIjKlMnOpQrStUvWxYz0123456789ABCDEF=');
-    await page.click('button:has-text("Derive")');
-    await page.waitForTimeout(200);
-  }
-  if (privInputs.length > 1) {
-    await privInputs[1].fill('cExAmPLePrIvAtEkEy123456789012345678901234=');
-  }
-
-  await page.fill('input[placeholder="X25519 public key (base64)"]', 'sErVeRPuBlIcKeY123456789012345678901234567=');
-  await page.fill('input[placeholder="10.0.0.1"]', '198.51.100.1');
-  await page.click('button:has-text("Generate Profile")');
+  const configCard = page.locator('.card').nth(1);
+  await configCard.locator('input[placeholder="X25519 private key (base64)"]').fill('cExAmPLePrIvAtEkEy123456789012345678901234=');
+  await configCard.locator('input[placeholder="X25519 public key (base64)"]').fill('sErVeRPuBlIcKeY123456789012345678901234567=');
+  await configCard.locator('input[placeholder="10.0.0.1"]').fill('198.51.100.1');
+  await configCard.locator('button:has-text("Generate Profile")').click();
   await page.waitForTimeout(300);
 
   // Full Keys view (Hero screenshot)
@@ -243,16 +240,10 @@ console.log('Capturing: 04_key_management.png & 05_config_generator.png');
   await page.screenshot({ path: path.join(ROOT_DIR, 'docs', 'gui-screenshot.png') });
 
   // Keygen card specific
-  const keyCard = await page.$('.card:nth-of-type(1)');
-  if (keyCard) {
-    await keyCard.screenshot({ path: path.join(SCREENSHOTS_DIR, '04_key_management.png') });
-  }
+  await keyCard.screenshot({ path: path.join(SCREENSHOTS_DIR, '04_key_management.png') });
 
   // Config card specific
-  const configCard = await page.$('.card:nth-of-type(2)');
-  if (configCard) {
-    await configCard.screenshot({ path: path.join(SCREENSHOTS_DIR, '05_config_generator.png') });
-  }
+  await configCard.screenshot({ path: path.join(SCREENSHOTS_DIR, '05_config_generator.png') });
 
   await context.close();
 }
@@ -263,7 +254,7 @@ console.log('Capturing: 06_settings_panel.png');
   const { page, context } = await createPage(940, 520);
   await page.click('#tab-settings');
   await page.waitForTimeout(200);
-  await page.fill('input[value=""]', '198.51.100.1');
+  await page.fill('input[placeholder*="140.238"]', '198.51.100.1');
   await page.click('button:has-text("Save Changes")');
   await page.waitForTimeout(300);
   await page.screenshot({ path: path.join(SCREENSHOTS_DIR, '06_settings_panel.png') });
