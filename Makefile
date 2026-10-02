@@ -1,4 +1,4 @@
-.PHONY: all build build-cli build-gui dev-gui test test-core test-gui lint lint-gui clean check release
+.PHONY: all build build-cli build-gui dev-gui test test-core test-gui lint lint-gui clean check release deploy-oracle
 SHELL := /bin/bash
 .DELETE_ON_ERROR:
 
@@ -40,3 +40,7 @@ clean:
 
 release:
 	bash scripts/sign-package.sh
+
+deploy-oracle:
+	bash scripts/deploy-oracle.sh $${ORACLE_HOST:-oracle} $${PEER:-}
+

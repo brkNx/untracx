@@ -61,7 +61,19 @@ Kurulum yapılacak sunucuda aşağıdaki portların açık olması gerekir:
 - **WireGuard (UDP 51820)**: İstemcilerin bağlanabilmesi için genel erişime açık olmalıdır.
 - **DNS (TCP/UDP 53)**: Dış internete **kesinlikle açılmamalıdır** (setup script'i tünel içinden otomatik izin verir).
 
-### 4.2 Kurulum Adımları
+### 4.2 Otomatik Kurulum (Oracle Cloud / OCI ve Uzak Sunucu)
+Detaylı OCI güvenlik listesi rehberi için [docs/oracle-deployment.md](docs/oracle-deployment.md) dosyasına göz atın.
+
+**Tek Komutla Dağıtım:**
+```bash
+# Linux / macOS (Bash)
+bash scripts/deploy-oracle.sh oracle pc-brk
+
+# Windows (PowerShell)
+.\scripts\deploy-oracle.ps1 -Target oracle -Peer pc-brk
+```
+
+### 4.3 Manuel Kurulum Adımları
 Sunucu dosyalarını sunucuya aktarın:
 ```bash
 scp -r server ubuntu@<SUNUCU_IP>:/tmp/untracx-server
