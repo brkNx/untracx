@@ -14,7 +14,7 @@ path = "src/main.rs"
 
 [dependencies]
 x25519-dalek = { version = "2", features = ["static_secrets"] }
-rand = "0.8"
+rand = "0.10"
 base64 = "0.22"
 clap = { version = "4", features = ["derive"] }
 zeroize = "1"
