@@ -27,13 +27,13 @@ log() {
 }
 
 die() {
-  printf '[untracx] HATA: %s\n' "$*" >&2
+  printf '[untracx] ERROR: %s\n' "$*" >&2
   exit 1
 }
 
 on_error() {
   local exit_code=$?
-  printf '[untracx] HATA: kurulum satir %s civarinda durdu (kod %s).\n' "${BASH_LINENO[0]:-?}" "$exit_code" >&2
+  printf '[untracx] ERROR: setup halted near line %s (exit code %s).\n' "${BASH_LINENO[0]:-?}" "$exit_code" >&2
   exit "$exit_code"
 }
 trap on_error ERR
@@ -58,43 +58,43 @@ validate_endpoint() {
 }
 
 if [[ $EUID -ne 0 ]]; then
-  die "root olarak calistirin: sudo PUBLIC_ENDPOINT=<public-ip> bash setup.sh"
+  die "run as root: sudo PUBLIC_ENDPOINT=<public-ip> bash setup.sh"
 fi
 
-[[ -r /etc/os-release ]] || die "/etc/os-release bulunamadi"
+[[ -r /etc/os-release ]] || die "/etc/os-release not found"
 # shellcheck disable=SC1091
 . /etc/os-release
-[[ "${ID:-}" == "ubuntu" ]] || die "bu surum yalniz Ubuntu icin test edilmistir (bulunan: ${ID:-bilinmiyor})"
-[[ "${VERSION_ID:-}" == "24.04" || "${VERSION_ID:-}" == "22.04" ]] || die "Ubuntu 22.04/24.04 gerekli (bulunan: ${VERSION_ID:-bilinmiyor})"
+[[ "${ID:-}" == "ubuntu" ]] || die "this release is only verified for Ubuntu (found: ${ID:-unknown})"
+[[ "${VERSION_ID:-}" == "24.04" || "${VERSION_ID:-}" == "22.04" ]] || die "Ubuntu 22.04/24.04 required (found: ${VERSION_ID:-unknown})"
 
-[[ "$WG_IFACE" =~ ^[A-Za-z0-9_=+.-]{1,15}$ ]] || die "gecersiz WG_IFACE: $WG_IFACE"
-validate_port "$WG_PORT" || die "gecersiz WG_PORT: $WG_PORT"
+[[ "$WG_IFACE" =~ ^[A-Za-z0-9_=+.-]{1,15}$ ]] || die "invalid WG_IFACE: $WG_IFACE"
+validate_port "$WG_PORT" || die "invalid WG_PORT: $WG_PORT"
 if ! [[ "$WG_MTU" =~ ^[0-9]+$ ]] || ! (( 576 <= 10#$WG_MTU && 10#$WG_MTU <= 1500 )); then
-  die "gecersiz WG_MTU (576-1500): $WG_MTU"
+  die "invalid WG_MTU (576-1500): $WG_MTU"
 fi
 
 if [[ -z "$SSH_PORT" && -n "${SSH_CONNECTION:-}" ]]; then
   read -r _ _ _ SSH_PORT <<< "$SSH_CONNECTION"
 fi
 SSH_PORT="${SSH_PORT:-22}"
-validate_port "$SSH_PORT" || die "gecersiz SSH_PORT: $SSH_PORT"
+validate_port "$SSH_PORT" || die "invalid SSH_PORT: $SSH_PORT"
 
-[[ "$WG_SUBNET" == */24 ]] || die "bu MVP yalniz /24 WG_SUBNET destekler"
+[[ "$WG_SUBNET" == */24 ]] || die "this MVP only supports /24 WG_SUBNET"
 WG_NETWORK="${WG_SUBNET%/24}"
-validate_ipv4 "$WG_NETWORK" || die "gecersiz WG_SUBNET: $WG_SUBNET"
-[[ "${WG_NETWORK##*.}" == "0" ]] || die "WG_SUBNET /24 ag adresi .0 ile bitmeli"
-validate_ipv4 "$WG_SERVER_IP" || die "gecersiz WG_SERVER_IP: $WG_SERVER_IP"
-validate_ipv4 "$WG_DNS" || die "gecersiz WG_DNS: $WG_DNS"
+validate_ipv4 "$WG_NETWORK" || die "invalid WG_SUBNET: $WG_SUBNET"
+[[ "${WG_NETWORK##*.}" == "0" ]] || die "WG_SUBNET /24 network address must end with .0"
+validate_ipv4 "$WG_SERVER_IP" || die "invalid WG_SERVER_IP: $WG_SERVER_IP"
+validate_ipv4 "$WG_DNS" || die "invalid WG_DNS: $WG_DNS"
 WG_PREFIX="${WG_NETWORK%.*}"
-[[ "$WG_SERVER_IP" == "${WG_PREFIX}."* ]] || die "WG_SERVER_IP, WG_SUBNET icinde olmali"
+[[ "$WG_SERVER_IP" == "${WG_PREFIX}."* ]] || die "WG_SERVER_IP must be inside WG_SUBNET"
 WG_SERVER_HOST="${WG_SERVER_IP##*.}"
-(( 1 <= 10#$WG_SERVER_HOST && 10#$WG_SERVER_HOST <= 254 )) || die "WG_SERVER_IP kullanilabilir bir host adresi olmali"
+(( 1 <= 10#$WG_SERVER_HOST && 10#$WG_SERVER_HOST <= 254 )) || die "WG_SERVER_IP must be a usable host address"
 
 for helper in add-peer.sh remove-peer.sh; do
-  [[ -f "${SCRIPT_DIR}/${helper}" ]] || die "${helper} bulunamadi; private repodan server/ klasorunun tamamini yukleyin"
+  [[ -f "${SCRIPT_DIR}/${helper}" ]] || die "${helper} not found; please upload the complete server/ directory"
 done
 
-log "[1/8] Paketler kuruluyor..."
+log "[1/8] Installing packages..."
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq \
@@ -103,34 +103,34 @@ apt-get install -y -qq \
 
 if [[ -z "$PUBLIC_ENDPOINT" ]]; then
   PUBLIC_ENDPOINT="$(curl -4 --fail --silent --show-error --max-time 10 https://api.ipify.org)" || \
-    die "public IP algilanamadi; PUBLIC_ENDPOINT=<public-ip> ile tekrar calistirin"
+    die "public IP auto-detection failed; re-run with PUBLIC_ENDPOINT=<public-ip>"
 fi
-validate_endpoint "$PUBLIC_ENDPOINT" || die "gecersiz PUBLIC_ENDPOINT: $PUBLIC_ENDPOINT"
+validate_endpoint "$PUBLIC_ENDPOINT" || die "invalid PUBLIC_ENDPOINT: $PUBLIC_ENDPOINT"
 
 OUT_IFACE="$(ip -4 route show default | awk 'NR == 1 { print $5 }')"
-[[ -n "$OUT_IFACE" ]] || die "varsayilan IPv4 dis arayuzu bulunamadi"
-[[ "$OUT_IFACE" =~ ^[A-Za-z0-9_.:-]{1,32}$ ]] || die "gecersiz dis arayuz adi: $OUT_IFACE"
-log "Dis arayuz: ${OUT_IFACE}; endpoint: ${PUBLIC_ENDPOINT}:${WG_PORT}"
+[[ -n "$OUT_IFACE" ]] || die "default IPv4 egress interface not found"
+[[ "$OUT_IFACE" =~ ^[A-Za-z0-9_.:-]{1,32}$ ]] || die "invalid egress interface name: $OUT_IFACE"
+log "Egress interface: ${OUT_IFACE}; endpoint: ${PUBLIC_ENDPOINT}:${WG_PORT}"
 
-log "[2/8] Dizinler ve yonlendirme ayarlaniyor..."
+log "[2/8] Configuring directories and forwarding..."
 install -d -o root -g root -m 0700 "$WG_DIR" "$UNTRACX_DIR" /var/lib/untracx/peers
 cat > /etc/sysctl.d/99-untracx.conf <<'EOF'
 net.ipv4.ip_forward = 1
 EOF
 sysctl --system > /dev/null
 
-log "[3/8] Sunucu anahtari hazirlaniyor..."
+log "[3/8] Preparing server cryptographic key..."
 if [[ ! -s "$SERVER_PRIV" ]]; then
   wg genkey > "$SERVER_PRIV"
   chmod 0600 "$SERVER_PRIV"
-  log "Yeni sunucu anahtari olusturuldu."
+  log "Generated new server private key."
 else
-  log "Mevcut sunucu private key korundu."
+  log "Preserved existing server private key."
 fi
 wg pubkey < "$SERVER_PRIV" > "$SERVER_PUB"
 chmod 0600 "$SERVER_PUB"
 
-log "[4/8] WireGuard yapilandirmasi hazirlaniyor..."
+log "[4/8] Generating WireGuard configuration..."
 if [[ ! -e "$WG_CONF" ]]; then
   cat > "$WG_CONF" <<EOF
 [Interface]
@@ -139,7 +139,7 @@ ListenPort = ${WG_PORT}
 MTU = ${WG_MTU}
 PrivateKey = $(<"$SERVER_PRIV")
 
-# Rules are limited to the VPN subnet and the detected OCI egress interface.
+# Rules are limited to the VPN subnet and the detected egress interface.
 PostUp = iptables -w -C FORWARD -i %i -o ${OUT_IFACE} -s ${WG_SUBNET} -j ACCEPT 2>/dev/null || iptables -w -I FORWARD 1 -i %i -o ${OUT_IFACE} -s ${WG_SUBNET} -j ACCEPT
 PostUp = iptables -w -C FORWARD -i ${OUT_IFACE} -o %i -d ${WG_SUBNET} -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || iptables -w -I FORWARD 1 -i ${OUT_IFACE} -o %i -d ${WG_SUBNET} -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
 PostUp = iptables -w -t nat -C POSTROUTING -s ${WG_SUBNET} -o ${OUT_IFACE} -j MASQUERADE 2>/dev/null || iptables -w -t nat -A POSTROUTING -s ${WG_SUBNET} -o ${OUT_IFACE} -j MASQUERADE
@@ -149,13 +149,13 @@ PostDown = iptables -w -t nat -D POSTROUTING -s ${WG_SUBNET} -o ${OUT_IFACE} -j 
 EOF
   chmod 0600 "$WG_CONF"
 else
-  log "Mevcut ${WG_CONF} ve peer kayitlari korunuyor."
+  log "Preserving existing ${WG_CONF} and configured peers."
   EXISTING_ADDRESS="$(awk -F= '/^[[:space:]]*Address[[:space:]]*=/ { gsub(/[[:space:]]/, "", $2); print $2; exit }' "$WG_CONF")"
   EXISTING_PORT="$(awk -F= '/^[[:space:]]*ListenPort[[:space:]]*=/ { gsub(/[[:space:]]/, "", $2); print $2; exit }' "$WG_CONF")"
   [[ "$EXISTING_ADDRESS" == "${WG_SERVER_IP}/24" ]] || \
-    die "mevcut config Address=${EXISTING_ADDRESS}; istenen ${WG_SERVER_IP}/24. Otomatik ezme yapilmadi"
+    die "existing config has Address=${EXISTING_ADDRESS}; requested ${WG_SERVER_IP}/24. Aborting automatic overwrite."
   [[ "$EXISTING_PORT" == "$WG_PORT" ]] || \
-    die "mevcut config ListenPort=${EXISTING_PORT}; istenen ${WG_PORT}. Otomatik ezme yapilmadi"
+    die "existing config has ListenPort=${EXISTING_PORT}; requested ${WG_PORT}. Aborting automatic overwrite."
 fi
 
 cat > "$SERVER_ENV" <<EOF
@@ -170,7 +170,7 @@ PUBLIC_ENDPOINT=${PUBLIC_ENDPOINT}
 EOF
 chmod 0600 "$SERVER_ENV"
 
-log "[5/8] VPN-ici DNS resolver ayarlaniyor..."
+log "[5/8] Configuring in-tunnel DNS resolver..."
 if [[ "$WG_DNS" == "$WG_SERVER_IP" ]]; then
   cat > /etc/unbound/unbound.conf.d/untracx.conf <<EOF
 server:
@@ -195,11 +195,11 @@ Requires=wg-quick@${WG_IFACE}.service
 EOF
   unbound-checkconf > /dev/null
 else
-  log "Harici WG_DNS secildi; yerel Unbound dinleyicisi etkinlestirilmiyor."
+  log "External WG_DNS specified; skipping local Unbound configuration."
   rm -f /etc/unbound/unbound.conf.d/untracx.conf /etc/systemd/system/unbound.service.d/untracx.conf
 fi
 
-log "[6/8] UFW, fail2ban ve otomatik guvenlik guncellemeleri ayarlaniyor..."
+log "[6/8] Configuring UFW, fail2ban, and unattended upgrades..."
 ufw default deny incoming > /dev/null
 ufw default allow outgoing > /dev/null
 ufw default deny routed > /dev/null
@@ -224,11 +224,11 @@ APT::Periodic::Update-Package-Lists "1";
 APT::Periodic::Unattended-Upgrade "1";
 EOF
 
-log "[7/8] Peer yonetim komutlari kuruluyor..."
+log "[7/8] Installing peer management utilities..."
 install -o root -g root -m 0700 "${SCRIPT_DIR}/add-peer.sh" /usr/local/sbin/untracx-add-peer
 install -o root -g root -m 0700 "${SCRIPT_DIR}/remove-peer.sh" /usr/local/sbin/untracx-remove-peer
 
-log "[8/8] Servisler baslatiliyor ve dogrulaniyor..."
+log "[8/8] Starting and verifying services..."
 systemctl daemon-reload
 systemctl enable "wg-quick@${WG_IFACE}" fail2ban unattended-upgrades > /dev/null
 systemctl restart "wg-quick@${WG_IFACE}"
@@ -238,28 +238,28 @@ if [[ "$WG_DNS" == "$WG_SERVER_IP" ]]; then
   systemctl restart unbound
 fi
 
-systemctl is-active --quiet "wg-quick@${WG_IFACE}" || die "WireGuard servisi aktif degil"
-wg show "$WG_IFACE" > /dev/null || die "WireGuard arayuzu okunamadi"
+systemctl is-active --quiet "wg-quick@${WG_IFACE}" || die "WireGuard service is not active"
+wg show "$WG_IFACE" > /dev/null || die "WireGuard interface could not be read"
 ss -H -lun | awk -v port=":${WG_PORT}" '$4 ~ port "$" { found=1 } END { exit !found }' || \
-  die "UDP ${WG_PORT} dinleyicisi gorunmuyor"
+  die "UDP port ${WG_PORT} listener not found"
 if [[ "$WG_DNS" == "$WG_SERVER_IP" ]]; then
-  systemctl is-active --quiet unbound || die "Unbound servisi aktif degil"
+  systemctl is-active --quiet unbound || die "Unbound service is not active"
 fi
 
 cat <<EOF
 
-================== UNTRACX HAZIR ==================
-Sunucu PublicKey : $(<"$SERVER_PUB")
-Sunucu endpoint  : ${PUBLIC_ENDPOINT}:${WG_PORT}/udp
-VPN alt agi      : ${WG_SUBNET}
+================== UNTRACX READY ==================
+Server PublicKey : $(<"$SERVER_PUB")
+Server Endpoint  : ${PUBLIC_ENDPOINT}:${WG_PORT}/udp
+VPN Subnet       : ${WG_SUBNET}
 VPN DNS          : ${WG_DNS}
-Dis arayuz       : ${OUT_IFACE}
+Egress Interface : ${OUT_IFACE}
 
-Sonraki adim:
-  sudo untracx-add-peer <cihaz-adi>
+Next step:
+  sudo untracx-add-peer <device-name>
 
-OCI Console'da UDP ${WG_PORT} ingress kuralinin da acik olmasi gerekir.
-Durum:
+OCI Console UDP ${WG_PORT} ingress rule must be open.
+Status check:
   sudo wg show ${WG_IFACE}
 ===================================================
 EOF

@@ -3,21 +3,18 @@ use std::io::Write;
 use std::path::Path;
 use zeroize::Zeroize;
 
-/// Config/çıktı yolu path traversal'a karşı doğrular:
-/// ".." bileşeni reddedilir, dosya adı boş/whitespace/slash içeremez.
+/// Validates that config/output paths are safe against directory traversal:
+/// Rejects ".." components, empty stems, whitespace, and invalid characters.
 pub fn validate_safe_path(path: &str) -> Result<(), String> {
     let p = Path::new(path);
     for comp in p.components() {
         if let std::path::Component::ParentDir = comp {
-            return Err(format!("Yol '..' içeremez: {path}"));
+            return Err(format!("Path cannot contain '..': {path}"));
         }
     }
-    let stem = p
-        .file_stem()
-        .ok_or("Geçersiz dosya yolu")?
-        .to_string_lossy();
+    let stem = p.file_stem().ok_or("Invalid file path")?.to_string_lossy();
     if stem.is_empty() || stem.contains('/') || stem.contains(char::is_whitespace) {
-        return Err(format!("Dosya adı geçersiz: {path}"));
+        return Err(format!("Invalid filename: {path}"));
     }
     Ok(())
 }
@@ -27,7 +24,7 @@ pub fn validate_safe_path(path: &str) -> Result<(), String> {
 pub fn write_secret_file_atomic(dest_path: &Path, content: &mut str) -> Result<(), String> {
     let parent = dest_path.parent().unwrap_or_else(|| Path::new("."));
     if !parent.as_os_str().is_empty() && !parent.exists() {
-        std::fs::create_dir_all(parent).map_err(|e| format!("Dizin oluşturulamadı: {e}"))?;
+        std::fs::create_dir_all(parent).map_err(|e| format!("Failed to create directory: {e}"))?;
     }
 
     let rand_id: u64 = rand::random();
@@ -52,19 +49,19 @@ pub fn write_secret_file_atomic(dest_path: &Path, content: &mut str) -> Result<(
 
         let mut file = options
             .open(&temp_path)
-            .map_err(|e| format!("Geçici dosya açılamadı ({temp_path:?}): {e}"))?;
+            .map_err(|e| format!("Failed to open temporary file ({temp_path:?}): {e}"))?;
 
         file.write_all(content.as_bytes())
-            .map_err(|e| format!("Yazma hatası: {e}"))?;
+            .map_err(|e| format!("Write error: {e}"))?;
 
-        file.sync_all().map_err(|e| format!("Fsync hatası: {e}"))?;
+        file.sync_all().map_err(|e| format!("Fsync error: {e}"))?;
 
         drop(file);
 
         // Atomic replace
         std::fs::rename(&temp_path, dest_path).map_err(|e| {
             format!(
-                "Atomik yeniden adlandırma başarısız ({} -> {}): {e}",
+                "Atomic rename failed ({} -> {}): {e}",
                 temp_path.display(),
                 dest_path.display()
             )

@@ -10,7 +10,7 @@ pub struct ConnInfo {
 
 pub fn connect(config_path: &str) -> Result<(), String> {
     if !platform::is_root() {
-        return Err("root/yönetici hakları gerekli: sudo untracx connect <conf>".into());
+        return Err("root/administrator privileges required: sudo untracx connect <conf>".into());
     }
     let conn = resolve_interface(config_path)?;
     let iface = &conn.interface;
@@ -21,21 +21,21 @@ pub fn connect(config_path: &str) -> Result<(), String> {
             .output()
             .map_err(|e| e.to_string())?;
         if out.status.success() {
-            println!("✓ {} yukarı ({})", iface, wg_quick_bin.display());
+            println!("✓ {} up ({})", iface, wg_quick_bin.display());
             return Ok(());
         }
         return Err(String::from_utf8_lossy(&out.stderr).into());
     }
 
     Err(
-        "wg-quick bulunamadı. Linux için: sudo apt-get install wireguard-tools; macOS için: brew install wireguard-tools"
+        "wg-quick not found. For Linux: sudo apt-get install wireguard-tools; for macOS: brew install wireguard-tools"
             .into(),
     )
 }
 
 pub fn down(config_path: &str) -> Result<(), String> {
     if !platform::is_root() {
-        return Err("root/yönetici hakları gerekli: sudo untracx down".into());
+        return Err("root/administrator privileges required: sudo untracx down".into());
     }
     let conn = resolve_interface(config_path)?;
     let iface = &conn.interface;
@@ -46,23 +46,23 @@ pub fn down(config_path: &str) -> Result<(), String> {
             .output()
             .map_err(|e| e.to_string())?;
         if out.status.success() {
-            println!("✓ {} aşağı", iface);
+            println!("✓ {} down", iface);
             return Ok(());
         }
         return Err(String::from_utf8_lossy(&out.stderr).into());
     }
-    Err("wg-quick bulunamadı — arayüzü manuel kapatın".into())
+    Err("wg-quick not found — tear down interface manually".into())
 }
 
 pub fn status() -> Result<(), String> {
     let wg_bin = match find_trusted_binary("wg") {
         Some(b) => b,
-        None => return Err("wg aracı bulunamadı (wireguard-tools kurun)".into()),
+        None => return Err("wg utility not found (install wireguard-tools)".into()),
     };
     let out = Command::new(&wg_bin).output().map_err(|e| e.to_string())?;
     let text = String::from_utf8_lossy(&out.stdout).to_string();
     if text.trim().is_empty() {
-        println!("VPN bağlı değil.");
+        println!("VPN is not connected.");
     } else {
         print!("{}", text);
     }
@@ -73,21 +73,21 @@ fn resolve_interface(config_path: &str) -> Result<ConnInfo, String> {
     let p = Path::new(config_path);
     for component in p.components() {
         if let std::path::Component::ParentDir = component {
-            return Err("Config dosya yolu '..' içeremez".into());
+            return Err("Config file path cannot contain '..'".into());
         }
     }
     let stem = p
         .file_stem()
-        .ok_or("Geçersiz config yolu")?
+        .ok_or("Invalid config path")?
         .to_string_lossy()
         .to_string();
     if !valid_interface_name(&stem) {
         return Err(format!(
-            "Config dosya adı arayüz adı olarak geçersiz (15 karakter, [A-Za-z0-9_.=+-]): {stem}"
+            "Config filename is invalid as interface name (max 15 chars, [A-Za-z0-9_.=+-]): {stem}"
         ));
     }
     if !p.is_file() {
-        return Err(format!("Config dosyası bulunamadı: {config_path}"));
+        return Err(format!("Config file not found: {config_path}"));
     }
     check_config_perms(p)?;
     Ok(ConnInfo {
@@ -96,8 +96,8 @@ fn resolve_interface(config_path: &str) -> Result<ConnInfo, String> {
     })
 }
 
-/// WireGuard arayüz adı beyaz listeden geçer: maks 15 karakter,
-/// yalnızca [A-Za-z0-9_.=+-]. Helper daemonu ve GUI de bunu kullanır.
+/// WireGuard interface name validation: max 15 characters,
+/// strictly [A-Za-z0-9_.=+-]. Used by helper daemon and GUI as well.
 pub fn valid_interface_name(name: &str) -> bool {
     !name.is_empty()
         && name.len() <= 15
@@ -108,14 +108,14 @@ pub fn valid_interface_name(name: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '=' | '+' | '.'))
 }
 
-/// Config içinde özel anahtar var; başkaları okuyamamalı (0600 gerekir).
+/// Protects private keys in config files by enforcing 0600 permissions.
 #[cfg(unix)]
 fn check_config_perms(p: &Path) -> Result<(), String> {
     use std::os::unix::fs::MetadataExt;
     let meta = p.metadata().map_err(|e| e.to_string())?;
     if meta.mode() & 0o077 != 0 {
         return Err(format!(
-            "{} başkaları tarafından okunabilir (izin: {:o}). chmod 600 {} yapın",
+            "{} is readable by others (mode: {:o}). Run chmod 600 {}",
             p.display(),
             meta.mode() & 0o777,
             p.display()
@@ -129,7 +129,7 @@ fn check_config_perms(_p: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// Binary'yi önce güvenilir sistem dizinlerinde, sonra PATH üzerinde arar.
+/// Searches for binary in preferred trusted directories, then standard PATH.
 pub(crate) fn find_trusted_binary(binary_name: &str) -> Option<PathBuf> {
     for search_dir in platform::trusted_search_paths() {
         #[cfg(windows)]
@@ -187,6 +187,7 @@ fn is_executable_file(path: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
     use std::io::Write as _;
 
     #[test]
@@ -200,7 +201,7 @@ mod tests {
             "a=b",
             "x.y",
         ] {
-            assert!(valid_interface_name(ok), "geçerli olmalı: {ok}");
+            assert!(valid_interface_name(ok), "should be valid: {ok}");
         }
         for bad in [
             "",
@@ -211,9 +212,9 @@ mod tests {
             "a$b",
             "a`b",
             "a\nb",
-            "abcdefghijklmnopq", // 17 karakter
+            "abcdefghijklmnopq", // 17 characters
         ] {
-            assert!(!valid_interface_name(bad), "geçersiz olmalı: {bad:?}");
+            assert!(!valid_interface_name(bad), "should be invalid: {bad:?}");
         }
     }
 
@@ -226,13 +227,13 @@ mod tests {
     #[test]
     fn resolve_rejects_loose_stem() {
         let err = resolve_interface("/tmp/a;b.conf").unwrap_err();
-        assert!(err.contains("geçersiz"), "err: {err}");
+        assert!(err.to_lowercase().contains("invalid"), "err: {err}");
     }
 
     #[test]
     fn resolve_rejects_missing_file() {
         let err = resolve_interface("/tmp/kesinlikle-yok.conf").unwrap_err();
-        assert!(err.contains("bulunamadı"), "err: {err}");
+        assert!(err.to_lowercase().contains("not found"), "err: {err}");
     }
 
     #[cfg(unix)]

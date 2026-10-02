@@ -67,7 +67,7 @@ pub fn validate_private(private_b64: &str) -> Result<[u8; 32], String> {
     let mut raw = B64.decode(private_b64.trim()).map_err(|e| e.to_string())?;
     let result: [u8; 32] = raw[..]
         .try_into()
-        .map_err(|_| "Özel anahtar 32 bayt olmalı (base64)".to_string())?;
+        .map_err(|_| "Private key must be 32 bytes (base64)".to_string())?;
     raw.zeroize();
     Ok(result)
 }
@@ -83,7 +83,7 @@ pub fn public_from_private(private_b64: &str) -> Result<String, String> {
 pub fn validate_public(public_b64: &str) -> Result<(), String> {
     let decoded = B64.decode(public_b64.trim()).map_err(|e| e.to_string())?;
     if decoded.len() != 32 {
-        return Err("Genel anahtar 32 bayt olmalı".to_string());
+        return Err("Public key must be 32 bytes".to_string());
     }
     Ok(())
 }
@@ -91,7 +91,7 @@ pub fn validate_public(public_b64: &str) -> Result<(), String> {
 pub fn validate_preshared_key(psk_b64: &str) -> Result<(), String> {
     let decoded = B64.decode(psk_b64.trim()).map_err(|e| e.to_string())?;
     if decoded.len() != 32 {
-        return Err("Pre-shared key 32 bayt olmalı (base64)".to_string());
+        return Err("Pre-shared key must be 32 bytes (base64)".to_string());
     }
     Ok(())
 }

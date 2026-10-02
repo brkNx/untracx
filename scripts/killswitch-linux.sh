@@ -13,15 +13,15 @@ log() {
 }
 
 die() {
-  printf '[untracx-killswitch] HATA: %s\n' "$*" >&2
+  printf '[untracx-killswitch] ERROR: %s\n' "$*" >&2
   exit 1
 }
 
-[[ $EUID -eq 0 ]] || die "root olarak calistirin (sudo)"
-[[ "$WG_IFACE" =~ ^[A-Za-z0-9_=+.-]{1,15}$ ]] || die "gecersiz WG_IFACE: $WG_IFACE"
+[[ $EUID -eq 0 ]] || die "must be run as root (sudo)"
+[[ "$WG_IFACE" =~ ^[A-Za-z0-9_=+.-]{1,15}$ ]] || die "invalid WG_IFACE: $WG_IFACE"
 
-ac() {
-  log "Kill-switch etkinlestiriliyor (nftables inet fail-closed output)..."
+enable_ks() {
+  log "Enabling kill-switch (nftables inet fail-closed output)..."
   mkdir -p /run/untracx
 
   if [[ ! -f "$BACKUP_FILE" ]]; then
@@ -47,31 +47,31 @@ TABLE_CONF
     nft add rule inet untracx_killswitch output ip daddr "$SERVER_IP" udp dport "$WG_PORT" accept
   fi
 
-  log "Kill-switch AKTIF: Tum fiziksel cikis trafigi bloke edildi (yalniz $WG_IFACE acik)."
+  log "Kill-switch ACTIVE: All physical egress blocked (only $WG_IFACE allowed)."
 }
 
-kapat() {
-  log "Kill-switch devre disi birakiliyor..."
+disable_ks() {
+  log "Disabling kill-switch..."
   nft delete table inet untracx_killswitch 2>/dev/null || true
   rm -f "$BACKUP_FILE"
-  log "Kill-switch KAPALI: Normal ag akisi saglandi."
+  log "Kill-switch INACTIVE: Standard network traffic restored."
 }
 
-durum() {
+status_ks() {
   if nft list table inet untracx_killswitch > /dev/null 2>&1; then
-    echo "Kill-switch DURUM: AKTIF (Arayuz: $WG_IFACE)"
+    echo "Kill-switch STATUS: ACTIVE (Interface: $WG_IFACE)"
     nft list table inet untracx_killswitch
   else
-    echo "Kill-switch DURUM: KAPALI"
+    echo "Kill-switch STATUS: INACTIVE"
   fi
 }
 
 case "${1:-}" in
-  ac) ac ;;
-  kapat) kapat ;;
-  durum) durum ;;
+  enable|ac) enable_ks ;;
+  disable|kapat) disable_ks ;;
+  status|durum) status_ks ;;
   *)
-    echo "Kullanim: $0 {ac|kapat|durum}"
+    echo "Usage: $0 {enable|disable|status}"
     exit 1
     ;;
 esac

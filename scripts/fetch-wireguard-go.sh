@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-# untracx — wireguard-go kullanıcı alanı binary'sini kurar
-# (wg-quick/kernel modülü olmayan sistemler için: Windows, macOS)
+# untracx — installs wireguard-go userspace binary
+# (for systems without native kernel WireGuard or wg-quick: Windows, macOS)
 set -euo pipefail
 
 if ! command -v go >/dev/null 2>&1; then
-  echo "HATA: Go kurulu değil. https://go.dev/dl adresinden kurun." >&2
+  echo "ERROR: Go is not installed. Install Go from https://go.dev/dl" >&2
   exit 1
 fi
 
 GOBIN_DIR="$(go env GOPATH)/bin"
-echo "[1/1] wireguard-go derleniyor → ${GOBIN_DIR}"
-# Sabit sürüm: @latest yerine bilinen iyi bir sürüm (tedarik zinciri güvenliği).
+echo "[1/1] Compiling wireguard-go → ${GOBIN_DIR}"
+# Pinned version for reproducible supply-chain security
 go install golang.zx2c4.com/wireguard/cmd/wireguard-go@v0.0.20230227
 
-echo "✓ Kuruldu: ${GOBIN_DIR}/wireguard-go"
-echo "  PATH'e ekleyin veya scripti bundle'a gömün."
+echo "✓ Installed: ${GOBIN_DIR}/wireguard-go"
+echo "  Add to your PATH or bundle into distribution."

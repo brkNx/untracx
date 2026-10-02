@@ -9,22 +9,22 @@ PEER_DIR="/var/lib/untracx/peers"
 LOCK_FILE="/run/lock/untracx-peer.lock"
 
 die() {
-  printf 'HATA: %s\n' "$*" >&2
+  printf 'ERROR: %s\n' "$*" >&2
   exit 1
 }
 
-[[ $EUID -eq 0 ]] || die "root olarak calistirin: sudo untracx-remove-peer <cihaz-adi>"
-[[ $# -eq 1 ]] || die "kullanim: sudo untracx-remove-peer <cihaz-adi>"
+[[ $EUID -eq 0 ]] || die "must be run as root: sudo untracx-remove-peer <device-name>"
+[[ $# -eq 1 ]] || die "usage: sudo untracx-remove-peer <device-name>"
 
 CLIENT_NAME=$1
-[[ "$CLIENT_NAME" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$ ]] || die "gecersiz cihaz adi"
-[[ -r "$ENV_FILE" ]] || die "$ENV_FILE bulunamadi"
+[[ "$CLIENT_NAME" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$ ]] || die "invalid device name"
+[[ -r "$ENV_FILE" ]] || die "$ENV_FILE not found"
 # shellcheck disable=SC1090
 . "$ENV_FILE"
 
 WG_CONF="/etc/wireguard/${WG_IFACE}.conf"
 META_FILE="${PEER_DIR}/${CLIENT_NAME}.env"
-[[ -r "$META_FILE" ]] || die "${CLIENT_NAME} adli yonetilen peer bulunamadi"
+[[ -r "$META_FILE" ]] || die "managed peer named ${CLIENT_NAME} not found"
 # shellcheck disable=SC1090
 . "$META_FILE"
 
@@ -122,7 +122,7 @@ printf '%s\n' "$PARSER_OUT" > "$TMP_SERVER"
 rm -f "${TMP_SERVER}.meta"
 
 if [[ "${REMOVED_COUNT:-0}" -eq 0 ]]; then
-  die "peer konfigrasyonda bulunamadi; dosya degistirilmedi (fail-closed)"
+  die "peer not found in configuration; file unchanged (fail-closed)"
 fi
 
 chmod 0600 "$TMP_SERVER"
@@ -133,12 +133,12 @@ if command -v wg-quick >/dev/null 2>&1 && command -v wg >/dev/null 2>&1; then
   if ! wg syncconf "$WG_IFACE" <(wg-quick strip "$WG_IFACE"); then
     cp "$BACKUP_SERVER" "$WG_CONF"
     wg syncconf "$WG_IFACE" <(wg-quick strip "$WG_IFACE") || true
-    die "peer kaldirilamadi; sunucu config geri alindi"
+    die "failed to revoke peer; server config rolled back"
   fi
 fi
 
 rm -f "$META_FILE" "$BACKUP_SERVER"
 CONF_COMMITTED=0
 
-printf 'Peer iptal edildi: %s (%s)\n' "$CLIENT_NAME" "${CLIENT_IP:-}"
-printf 'Bu cihazin eski config dosyasi artik baglanamaz.\n'
+printf 'Peer revoked: %s (%s)\n' "$CLIENT_NAME" "${CLIENT_IP:-}"
+printf 'The old config file for this device can no longer connect.\n'

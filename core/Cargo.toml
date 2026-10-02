@@ -2,7 +2,7 @@
 name = "untracx"
 version = "0.1.0"
 edition = "2021"
-description = "Ücretsiz kişisel VPN — WireGuard tabanlı çekirdek CLI"
+description = "Free personal VPN — WireGuard-based core CLI"
 
 [lib]
 name = "untracx"

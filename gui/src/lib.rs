@@ -18,18 +18,18 @@ fn run_systemctl(args: &[&str]) -> Result<String, String> {
     }
 }
 
-// ── Helper servis komutları ──
+// ── Helper service commands ──
 
 #[tauri::command]
 fn helper_start() -> Result<String, String> {
     #[cfg(target_os = "linux")]
     {
         run_systemctl(&["--user", "start", "untracx-helper"])
-            .map(|_| "Helper servisi başlatıldı".to_string())
+            .map(|_| "Helper service started".to_string())
     }
     #[cfg(not(target_os = "linux"))]
     {
-        Err("Helper servisi macOS/Windows üzerinde terminalden 'sudo untracx helper start' komutu ile başlatılmalıdır.".into())
+        Err("Helper service on macOS/Windows must be started from the terminal with 'sudo untracx helper start'.".into())
     }
 }
 
@@ -38,16 +38,16 @@ fn helper_stop() -> Result<String, String> {
     #[cfg(target_os = "linux")]
     {
         run_systemctl(&["--user", "stop", "untracx-helper"])
-            .map(|_| "Helper servisi durduruldu".to_string())
+            .map(|_| "Helper service stopped".to_string())
     }
     #[cfg(not(target_os = "linux"))]
     {
         let sock = helper::sock_path();
         if sock.exists() {
             std::fs::remove_file(&sock).map_err(|e| e.to_string())?;
-            Ok("Helper soketi kaldırıldı".to_string())
+            Ok("Helper socket removed".to_string())
         } else {
-            Ok("Helper servisi çalışmıyor".to_string())
+            Ok("Helper service is not running".to_string())
         }
     }
 }
@@ -90,7 +90,7 @@ fn helper_status() -> Result<serde_json::Value, String> {
     }
 }
 
-// ── VPN komutları ──
+// ── VPN commands ──
 
 #[tauri::command]
 fn vpn_connect(config_path: String) -> Result<serde_json::Value, String> {
@@ -107,45 +107,45 @@ fn vpn_status() -> Result<serde_json::Value, String> {
     helper::cmd_status()
 }
 
-// ── Peer yönetimi (Komut Üretici & Kılavuz) ──
+// ── Peer management ──
 
 #[tauri::command]
 fn peer_list(iface: Option<String>) -> Result<serde_json::Value, String> {
     let iface = iface.unwrap_or_else(|| "wg0".to_string());
     if !is_valid_iface_name(&iface) {
-        return Err(format!("Geçersiz arayüz adı: {}", iface));
+        return Err(format!("Invalid interface name: {}", iface));
     }
     Ok(serde_json::json!({
         "ok": true,
         "peers": [],
         "interface": iface,
-        "note": "Peer yönetimi sunucu tarafında 'sudo untracx-add-peer' komutu ile yapılır."
+        "note": "Peer management is performed on the server with 'sudo untracx-add-peer'."
     }))
 }
 
 #[tauri::command]
 fn peer_add(name: String) -> Result<serde_json::Value, String> {
     if !is_valid_iface_name(&name) {
-        return Err(format!("Geçersiz cihaz adı: {}", name));
+        return Err(format!("Invalid device name: {}", name));
     }
     Ok(serde_json::json!({
         "ok": true,
-        "output": format!("Sunucuda çalıştırmak için: sudo untracx-add-peer {name}")
+        "output": format!("To run on server: sudo untracx-add-peer {name}")
     }))
 }
 
 #[tauri::command]
 fn peer_remove(name: String) -> Result<serde_json::Value, String> {
     if !is_valid_iface_name(&name) {
-        return Err(format!("Geçersiz cihaz adı: {}", name));
+        return Err(format!("Invalid device name: {}", name));
     }
     Ok(serde_json::json!({
         "ok": true,
-        "output": format!("Sunucuda çalıştırmak için: sudo untracx-remove-peer {name}")
+        "output": format!("To run on server: sudo untracx-remove-peer {name}")
     }))
 }
 
-// ── Anahtar yönetimi ──
+// ── Key management ──
 
 #[tauri::command]
 fn keygen() -> Result<serde_json::Value, String> {
@@ -181,7 +181,7 @@ fn validate_public_key(public_key: String) -> Result<serde_json::Value, String> 
     Ok(serde_json::json!({"ok": true, "valid": true}))
 }
 
-// ── Config üretimi ──
+// ── Config generation ──
 
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
@@ -219,7 +219,7 @@ fn save_config(mut content: String, path: String) -> Result<serde_json::Value, S
     Ok(serde_json::json!({"ok": true, "path": path}))
 }
 
-// ── App giriş noktası ──
+// ── App entry point ──
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {

@@ -9,27 +9,27 @@ PEER_DIR="/var/lib/untracx/peers"
 LOCK_FILE="/run/lock/untracx-peer.lock"
 
 die() {
-  printf 'HATA: %s\n' "$*" >&2
+  printf 'ERROR: %s\n' "$*" >&2
   exit 1
 }
 
-[[ $EUID -eq 0 ]] || die "root olarak calistirin: sudo untracx-add-peer <cihaz-adi> [client-public-key] [preshared-key]"
-[[ $# -ge 1 && $# -le 3 ]] || die "kullanim: sudo untracx-add-peer <cihaz-adi> [client-public-key] [preshared-key]"
+[[ $EUID -eq 0 ]] || die "must be run as root: sudo untracx-add-peer <device-name> [client-public-key] [preshared-key]"
+[[ $# -ge 1 && $# -le 3 ]] || die "usage: sudo untracx-add-peer <device-name> [client-public-key] [preshared-key]"
 
 CLIENT_NAME=$1
 [[ "$CLIENT_NAME" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$ ]] || \
-  die "cihaz adi 1-32 karakter olmali; yalniz harf, rakam, nokta, alt cizgi ve tire kullanin"
+  die "device name must be 1-32 chars; letters, numbers, dot, underscore, dash only"
 
 CLIENT_PUB_ARG="${2:-}"
 PRESHARED_KEY_ARG="${3:-}"
 
-[[ -r "$ENV_FILE" ]] || die "$ENV_FILE bulunamadi; once setup.sh calistirin"
+[[ -r "$ENV_FILE" ]] || die "$ENV_FILE not found; run setup.sh first"
 # shellcheck disable=SC1090
 . "$ENV_FILE"
 
 WG_CONF="/etc/wireguard/${WG_IFACE}.conf"
 META_FILE="${PEER_DIR}/${CLIENT_NAME}.env"
-[[ -s "$WG_CONF" ]] || die "$WG_CONF bulunamadi"
+[[ -s "$WG_CONF" ]] || die "$WG_CONF not found"
 
 CALLING_USER="${SUDO_USER:-root}"
 if [[ "$CALLING_USER" == "root" ]]; then
@@ -38,7 +38,7 @@ if [[ "$CALLING_USER" == "root" ]]; then
 else
   CALLING_HOME="$(getent passwd "$CALLING_USER" | cut -d: -f6)"
   CALLING_GROUP="$(id -gn "$CALLING_USER")"
-  [[ -n "$CALLING_HOME" && -d "$CALLING_HOME" ]] || die "sudo kullanicisinin home dizini bulunamadi"
+  [[ -n "$CALLING_HOME" && -d "$CALLING_HOME" ]] || die "sudo user home directory not found"
 fi
 OUT="${CALLING_HOME}/untracx-${CLIENT_NAME}.conf"
 
@@ -47,9 +47,9 @@ mkdir -p "$(dirname "$LOCK_FILE")"
 exec 9> "$LOCK_FILE"
 flock -x 9
 
-[[ ! -e "$META_FILE" ]] || die "${CLIENT_NAME} adli peer zaten var"
+[[ ! -e "$META_FILE" ]] || die "peer named ${CLIENT_NAME} already exists"
 if [[ -z "$CLIENT_PUB_ARG" ]]; then
-  [[ ! -e "$OUT" ]] || die "$OUT zaten var; once guvenli bir yere tasiyin veya silin"
+  [[ ! -e "$OUT" ]] || die "$OUT already exists; move or delete it first"
 fi
 
 PREFIX="${WG_SUBNET%.*}"
@@ -73,15 +73,15 @@ for host in $(seq 2 254); do
     break
   fi
 done
-[[ -n "$CLIENT_IP" ]] || die "${WG_SUBNET} icinde bos istemci adresi kalmadi"
+[[ -n "$CLIENT_IP" ]] || die "no available client IP left in ${WG_SUBNET}"
 
 if [[ -n "$CLIENT_PUB_ARG" ]]; then
   CLIENT_PUB="$CLIENT_PUB_ARG"
-  [[ "$CLIENT_PUB" =~ ^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=?$ ]] || die "gecersiz istemci genel anahtari (base64 curve25519)"
+  [[ "$CLIENT_PUB" =~ ^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=?$ ]] || die "invalid client public key (base64 curve25519)"
   CLIENT_PRIV=""
   if [[ -n "$PRESHARED_KEY_ARG" ]]; then
     PRESHARED_KEY="$PRESHARED_KEY_ARG"
-    [[ "$PRESHARED_KEY" =~ ^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=?$ ]] || die "gecersiz preshared key (base64)"
+    [[ "$PRESHARED_KEY" =~ ^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=?$ ]] || die "invalid preshared key (base64)"
   else
     PRESHARED_KEY="$(wg genpsk)"
   fi
@@ -158,7 +158,7 @@ if command -v wg-quick >/dev/null 2>&1 && command -v wg >/dev/null 2>&1; then
   if ! wg syncconf "$WG_IFACE" <(wg-quick strip "$WG_IFACE"); then
     cp "$BACKUP_SERVER" "$WG_CONF"
     wg syncconf "$WG_IFACE" <(wg-quick strip "$WG_IFACE") || true
-    die "peer canli yapilandirmaya uygulanamadi; sunucu config geri alindi"
+    die "failed to apply peer to live configuration; server config rolled back"
   fi
 fi
 
@@ -171,18 +171,18 @@ if [[ -n "$CLIENT_PRIV" ]]; then
       wg syncconf "$WG_IFACE" <(wg-quick strip "$WG_IFACE") || true
     fi
     rm -f "$META_FILE"
-    die "istemci config disari aktarilamadi; peer geri alindi"
+    die "failed to export client configuration; peer rolled back"
   fi
 fi
 
 CONF_COMMITTED=0
 rm -f "$BACKUP_SERVER"
 
-printf 'Peer eklendi: %s -> %s\n' "$CLIENT_NAME" "$CLIENT_IP"
+printf 'Peer added: %s -> %s\n' "$CLIENT_NAME" "$CLIENT_IP"
 if [[ -n "$CLIENT_PRIV" ]]; then
-  printf 'Istemci config: %s (sahip: %s, izin: 0600)\n' "$OUT" "$CALLING_USER"
-  printf 'Dosyayi cihaza kopyaladiktan sonra bu sunucu kopyasini silin.\n'
+  printf 'Client config: %s (owner: %s, mode: 0600)\n' "$OUT" "$CALLING_USER"
+  printf 'After copying this file to your device, delete this server copy.\n'
 else
-  printf 'Zero-trust modu: Sunucuda private key uretilmedi.\n'
+  printf 'Zero-trust mode: No private key was generated on the server.\n'
   printf 'PresharedKey: %s\n' "$PRESHARED_KEY"
 fi

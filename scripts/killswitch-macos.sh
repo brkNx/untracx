@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 # untracx - macOS Packet Filter (pf) Kill-Switch (Experimental CLI)
-# NOT: macOS uzerinde en guvenilir kill-switch resmi WireGuard.app On-Demand profilidir.
+# NOTE: On macOS, the most reliable kill-switch mechanism is the official WireGuard.app On-Demand profile.
 set -euo pipefail
 
 ANCHOR_NAME="com.untracx.killswitch"
 CONF_FILE="/etc/pf.anchors/${ANCHOR_NAME}"
 
 log() { printf '[untracx-killswitch] %s\n' "$*"; }
-die() { printf '[untracx-killswitch] HATA: %s\n' "$*" >&2; exit 1; }
+die() { printf '[untracx-killswitch] ERROR: %s\n' "$*" >&2; exit 1; }
 
-[[ $EUID -eq 0 ]] || die "root olarak calistirin (sudo)"
+[[ $EUID -eq 0 ]] || die "must be run as root (sudo)"
 
-ac() {
-  log "macOS pf kill-switch etkinlestiriliyor (Deneysel)..."
+enable_ks() {
+  log "Enabling macOS pf kill-switch (Experimental)..."
   mkdir -p /etc/pf.anchors
   cat > "$CONF_FILE" <<PF_EOF
 # untracx fail-closed anchor
@@ -25,28 +25,28 @@ PF_EOF
 
   pfctl -a "$ANCHOR_NAME" -f "$CONF_FILE" 2>/dev/null || true
   pfctl -e 2>/dev/null || true
-  log "Kill-switch AKTIF: utun ve endpoint disindaki cikislar engellendi."
-  log "Tavsiye: Tam entegrasyon icin resmi WireGuard.app On-Demand profilini kullanin."
+  log "Kill-switch ACTIVE: Non-tunnel egress blocked."
+  log "Recommendation: For seamless integration, use official WireGuard.app On-Demand mode."
 }
 
-kapat() {
-  log "pf kill-switch kurallari kaldiriliyor..."
+disable_ks() {
+  log "Disabling pf kill-switch rules..."
   pfctl -a "$ANCHOR_NAME" -F all 2>/dev/null || true
   rm -f "$CONF_FILE"
-  log "Kill-switch KAPALI."
+  log "Kill-switch INACTIVE."
 }
 
-durum() {
-  echo "--- $ANCHOR_NAME kurallari ---"
-  pfctl -a "$ANCHOR_NAME" -s rules 2>/dev/null || echo "KAPALI veya kural yok"
+status_ks() {
+  echo "--- $ANCHOR_NAME rules ---"
+  pfctl -a "$ANCHOR_NAME" -s rules 2>/dev/null || echo "INACTIVE or no rules present"
 }
 
 case "${1:-}" in
-  ac) ac ;;
-  kapat) kapat ;;
-  durum) durum ;;
+  enable|ac) enable_ks ;;
+  disable|kapat) disable_ks ;;
+  status|durum) status_ks ;;
   *)
-    echo "Kullanim: $0 {ac|kapat|durum}"
+    echo "Usage: $0 {enable|disable|status}"
     exit 1
     ;;
 esac

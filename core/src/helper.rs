@@ -40,18 +40,18 @@ pub fn sock_path() -> PathBuf {
 pub fn start() -> Result<(), String> {
     let path = sock_path();
     if path.exists() {
-        return Err(format!("Socket zaten mevcut: {}", path.display()));
+        return Err(format!("Socket already exists: {}", path.display()));
     }
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     let listener = UnixListener::bind(&path).map_err(|e| e.to_string())?;
-    println!("Helper dinliyor: {}", path.display());
-    println!("Ctrl+C ile durdurun.");
+    println!("Helper listening: {}", path.display());
+    println!("Stop with Ctrl+C.");
     for stream in listener.incoming() {
         match stream {
             Ok(stream) => handle_client(stream),
-            Err(e) => eprintln!("Baglanti hatasi: {e}"),
+            Err(e) => eprintln!("Connection error: {e}"),
         }
     }
     Ok(())
@@ -59,7 +59,7 @@ pub fn start() -> Result<(), String> {
 
 #[cfg(not(unix))]
 pub fn start() -> Result<(), String> {
-    Err("Helper servisi bu platformda desteklenmiyor".into())
+    Err("Helper service is not supported on this platform".into())
 }
 
 #[cfg(unix)]
@@ -67,16 +67,16 @@ pub fn stop() -> Result<(), String> {
     let path = sock_path();
     if path.exists() {
         fs::remove_file(&path).map_err(|e| e.to_string())?;
-        println!("Helper durduruldu: {}", path.display());
+        println!("Helper stopped: {}", path.display());
     } else {
-        println!("Helper calismiyor (socket yok).");
+        println!("Helper is not running (socket absent).");
     }
     Ok(())
 }
 
 #[cfg(not(unix))]
 pub fn stop() -> Result<(), String> {
-    Err("Helper servisi bu platformda desteklenmiyor".into())
+    Err("Helper service is not supported on this platform".into())
 }
 
 #[cfg(unix)]
@@ -118,7 +118,7 @@ pub fn cmd_connect(path: &str) -> Result<Value, String> {
 
 #[cfg(not(unix))]
 pub fn cmd_connect(_path: &str) -> Result<Value, String> {
-    Err("Platform desteklenmiyor".into())
+    Err("Platform not supported".into())
 }
 
 #[cfg(unix)]
@@ -135,7 +135,7 @@ pub fn cmd_down(iface: &str) -> Result<Value, String> {
 
 #[cfg(not(unix))]
 pub fn cmd_down(_iface: &str) -> Result<Value, String> {
-    Err("Platform desteklenmiyor".into())
+    Err("Platform not supported".into())
 }
 
 #[cfg(unix)]
@@ -152,7 +152,7 @@ pub fn cmd_status() -> Result<Value, String> {
 
 #[cfg(not(unix))]
 pub fn cmd_status() -> Result<Value, String> {
-    Err("Platform desteklenmiyor".into())
+    Err("Platform not supported".into())
 }
 
 #[cfg(unix)]
@@ -165,7 +165,7 @@ fn handle_client(mut stream: UnixStream) {
             let _ = send_json(&mut stream, &resp);
         }
         Err(e) => {
-            eprintln!("JSON okuma hatasi: {e}");
+            eprintln!("JSON parse error: {e}");
         }
     }
 }
@@ -177,7 +177,7 @@ fn process_request(req: &Value) -> Value {
         "connect" => cmd_connect_req(req),
         "down" => cmd_down_req(req),
         "status" => cmd_status_req(),
-        _ => json!({"ok": false, "error": format!("Bilinmeyen komut: {}", cmd)}),
+        _ => json!({"ok": false, "error": format!("Unknown command: {}", cmd)}),
     }
 }
 
@@ -185,27 +185,27 @@ fn process_request(req: &Value) -> Value {
 fn cmd_connect_req(req: &Value) -> Value {
     let path = match req.get("path").and_then(|v| v.as_str()) {
         Some(p) => p,
-        None => return json!({"ok": false, "error": "path zorunlu"}),
+        None => return json!({"ok": false, "error": "path is required"}),
     };
     if !is_allowed_config_path(path) {
-        return json!({"ok": false, "error": "Konfig dosyasi yolu izin verilmiyor"});
+        return json!({"ok": false, "error": "Config file path is not allowed"});
     }
     if !Path::new(path).is_file() {
-        return json!({"ok": false, "error": "Dosya bulunamadi"});
+        return json!({"ok": false, "error": "File not found"});
     }
     let iface = Path::new(path)
         .file_stem()
         .map(|s| s.to_string_lossy().to_string())
         .unwrap_or_default();
     if iface.is_empty() {
-        return json!({"ok": false, "error": "Gecersiz config dosya adi"});
+        return json!({"ok": false, "error": "Invalid config filename"});
     }
     if !crate::wireguard::valid_interface_name(&iface) {
-        return json!({"ok": false, "error": format!("Gecersiz arayuz adi: {}", iface)});
+        return json!({"ok": false, "error": format!("Invalid interface name: {}", iface)});
     }
     let wg_quick = match crate::wireguard::find_trusted_binary("wg-quick") {
         Some(b) => b,
-        None => return json!({"ok": false, "error": "wg-quick bulunamadi"}),
+        None => return json!({"ok": false, "error": "wg-quick not found"}),
     };
     let out = Command::new(&wg_quick).args(["up", path]).output();
     match out {
@@ -219,14 +219,14 @@ fn cmd_connect_req(req: &Value) -> Value {
 fn cmd_down_req(req: &Value) -> Value {
     let iface = match req.get("iface").and_then(|v| v.as_str()) {
         Some(i) => i,
-        None => return json!({"ok": false, "error": "iface zorunlu"}),
+        None => return json!({"ok": false, "error": "iface is required"}),
     };
     if !crate::wireguard::valid_interface_name(iface) {
-        return json!({"ok": false, "error": "Gecersiz arayuz adi"});
+        return json!({"ok": false, "error": "Invalid interface name"});
     }
     let wg_quick = match crate::wireguard::find_trusted_binary("wg-quick") {
         Some(b) => b,
-        None => return json!({"ok": false, "error": "wg-quick bulunamadi"}),
+        None => return json!({"ok": false, "error": "wg-quick not found"}),
     };
     let out = Command::new(&wg_quick).args(["down", iface]).output();
     match out {
@@ -240,7 +240,7 @@ fn cmd_down_req(req: &Value) -> Value {
 fn cmd_status_req() -> Value {
     let wg = match crate::wireguard::find_trusted_binary("wg") {
         Some(b) => b,
-        None => return json!({"ok": false, "error": "wg bulunamadi"}),
+        None => return json!({"ok": false, "error": "wg not found"}),
     };
     let out = Command::new(&wg).output();
     match out {
@@ -296,10 +296,10 @@ fn recv_json(stream: &mut UnixStream) -> Result<Value, String> {
 
     let n = reader.read_line(&mut line).map_err(|e| e.to_string())?;
     if n == 0 {
-        return Err("Baglanti kapandi".into());
+        return Err("Connection closed".into());
     }
     if line.len() > MAX_JSON_SIZE {
-        return Err("JSON mesaji cok buyuk".into());
+        return Err("JSON message too large".into());
     }
     serde_json::from_str(line.trim()).map_err(|e| e.to_string())
 }

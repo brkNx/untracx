@@ -1,29 +1,29 @@
 #!/usr/bin/env bash
-# untracx - gercek cihaz baglanti ve guvenlik dogrulama testi
-# Kullanim: bash scripts/test-connection.sh [peer-adi]
-# Zorunlu ortam degiskeni: UNTRACX_SERVER (ornegin: export UNTRACX_SERVER=1.2.3.4)
+# untracx - Live device connection and security verification test
+# Usage: bash scripts/test-connection.sh [peer-name]
+# Required environment variable: UNTRACX_SERVER (e.g., export UNTRACX_SERVER=1.2.3.4)
 set -Eeuo pipefail
 
-SERVER="${UNTRACX_SERVER:?'UNTRACX_SERVER ayarlanmadi (ornegin: export UNTRACX_SERVER=1.2.3.4)'}"
+SERVER="${UNTRACX_SERVER:?'UNTRACX_SERVER not set (e.g., export UNTRACX_SERVER=1.2.3.4)'}"
 SSH_USER="${UNTRACX_SSH_USER:-ubuntu}"
 PEER_NAME="${1:-testclient}"
 IFACE="${UNTRACX_IFACE:-wg0}"
 
 # Strict input validation to prevent remote injection
 [[ "$SERVER" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ || "$SERVER" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$ ]] || {
-  echo "HATA: Gecersiz SERVER adresi" >&2
+  echo "ERROR: Invalid SERVER address" >&2
   exit 1
 }
 [[ "$SSH_USER" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || {
-  echo "HATA: Gecersiz SSH_USER" >&2
+  echo "ERROR: Invalid SSH_USER" >&2
   exit 1
 }
 [[ "$PEER_NAME" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$ ]] || {
-  echo "HATA: Gecersiz PEER_NAME" >&2
+  echo "ERROR: Invalid PEER_NAME" >&2
   exit 1
 }
 [[ "$IFACE" =~ ^[A-Za-z0-9_=+.-]{1,15}$ ]] || {
-  echo "HATA: Gecersiz IFACE" >&2
+  echo "ERROR: Invalid IFACE" >&2
   exit 1
 }
 
@@ -33,10 +33,10 @@ TUNNEL_UP=0
 TEST_FAILED=0
 
 log() { printf '\n[untracx-test] %s\n' "$*"; }
-die() { printf '\n[untracx-test] HATA: %s\n' "$*" >&2; TEST_FAILED=1; exit 1; }
+die() { printf '\n[untracx-test] ERROR: %s\n' "$*" >&2; TEST_FAILED=1; exit 1; }
 
 cleanup() {
-  log "Temizlik yapiliyor..."
+  log "Cleaning up test resources..."
   if [[ "$TUNNEL_UP" -eq 1 ]]; then
     sudo wg-quick down "$LOCAL_CONF" 2>/dev/null || true
   fi
@@ -46,37 +46,37 @@ cleanup() {
   # shellcheck disable=SC2029
   ssh "$SSH_USER@$SERVER" "sudo untracx-remove-peer '$PEER_NAME'" 2>/dev/null || true
   if [[ "$TEST_FAILED" -ne 0 ]]; then
-    log "TEST BASARISIZ (exit 1)"
+    log "TEST FAILED (exit 1)"
     exit 1
   fi
 }
 trap cleanup EXIT INT TERM
 
-log "Sunucu: ${SERVER} | Peer: ${PEER_NAME} | Arayuz: ${IFACE}"
+log "Server: ${SERVER} | Peer: ${PEER_NAME} | Interface: ${IFACE}"
 
-# 1) Sunucuda peer olustur
-log "1/5 Sunucuda peer olusturuluyor..."
+# 1) Create peer on server
+log "1/5 Provisioning peer on server..."
 # shellcheck disable=SC2029
 ssh "$SSH_USER@$SERVER" "sudo untracx-add-peer '$PEER_NAME'"
 
-# 2) Config dosyasini indir ve sunucudaki kopyayi sil
-log "2/5 Config guvenli sekilde cekiliyor..."
+# 2) Fetch configuration securely and clean up remote copy
+log "2/5 Downloading client configuration..."
 scp -q "$SSH_USER@$SERVER":"~/${CONF_FILE}" "$LOCAL_CONF"
 chmod 0600 "$LOCAL_CONF"
 # shellcheck disable=SC2029
 ssh "$SSH_USER@$SERVER" "rm -f ~/'$CONF_FILE'"
 
-# 3) Tuneli ac
-log "3/5 Tunel aciliyor..."
+# 3) Bring up local tunnel
+log "3/5 Activating tunnel..."
 if command -v wg-quick >/dev/null 2>&1; then
   sudo wg-quick up "$LOCAL_CONF"
   TUNNEL_UP=1
 else
-  die "Yerel sistemde wg-quick bulunamadi"
+  die "wg-quick not found on local system"
 fi
 
-# 4) EGRESS (IPv4) testi
-log "4/5 EGRESS (IPv4) testi yapiliyor..."
+# 4) Egress IPv4 match test
+log "4/5 Verifying IPv4 egress..."
 ACTUAL_IP=""
 for _ in {1..5}; do
   ACTUAL_IP="$(curl -4 --max-time 6 --fail --silent https://api.ipify.org || true)"
@@ -85,35 +85,35 @@ for _ in {1..5}; do
 done
 
 if [[ "$ACTUAL_IP" == "$SERVER" ]]; then
-  echo "PASS: Cikis IP'si sunucu ile eslesiyor -> ${ACTUAL_IP}"
+  echo "PASS: Egress IP matches VPN server -> ${ACTUAL_IP}"
 else
-  echo "FAIL: Beklenen ${SERVER}, gorulen: ${ACTUAL_IP}" >&2
+  echo "FAIL: Expected ${SERVER}, observed: ${ACTUAL_IP}" >&2
   TEST_FAILED=1
 fi
 
-# 5) DNS testi (VPN-ici resolver)
-log "5/5 DNS testi (10.66.66.1)..."
+# 5) In-tunnel recursive DNS test
+log "5/5 Verifying internal DNS (10.66.66.1)..."
 if command -v dig >/dev/null 2>&1; then
   if dig +time=3 +tries=2 +short @10.66.66.1 google.com >/dev/null 2>&1; then
-    echo "PASS: VPN DNS cozumleme (10.66.66.1) basarili"
+    echo "PASS: VPN DNS resolution (10.66.66.1) successful"
   else
-    echo "FAIL: 10.66.66.1 DNS cevap vermedi" >&2
+    echo "FAIL: 10.66.66.1 DNS did not respond" >&2
     TEST_FAILED=1
   fi
 fi
 
-# 6) Handshake epoch testi
-log "Handshake dogrulamasi yapiliyor..."
+# 6) Handshake epoch check
+log "Verifying handshake timestamp..."
 CLIENT_PUB="$(sed -n 's/^PublicKey = //p' "$LOCAL_CONF" | head -1)"
 # shellcheck disable=SC2029
 LATEST_HS="$(ssh "$SSH_USER@$SERVER" "sudo wg show '$IFACE' latest-handshakes" | awk -v pub="$CLIENT_PUB" '$1 == pub { print $2 }' || true)"
 NOW="$(date +%s)"
 if [[ -n "$LATEST_HS" && "$LATEST_HS" =~ ^[0-9]+$ ]] && (( NOW - LATEST_HS < 120 )); then
-  echo "PASS: Guncel numeric handshake dogrulandi ($((NOW - LATEST_HS))s once)"
+  echo "PASS: Fresh numeric handshake verified ($((NOW - LATEST_HS))s ago)"
 else
-  echo "UYARI: Handshake zamani alinamadi veya eski ($LATEST_HS)"
+  echo "WARNING: Handshake timestamp missing or stale ($LATEST_HS)"
 fi
 
 if [[ "$TEST_FAILED" -eq 0 ]]; then
-  log "TUM TESTLER BASARILI (PASS)"
+  log "ALL TESTS PASSED (PASS)"
 fi

@@ -8,7 +8,7 @@ use zeroize::Zeroize;
 #[command(
     name = "untracx",
     version,
-    about = "Ücretsiz kişisel VPN — WireGuard çekirdek CLI"
+    about = "Free personal VPN — WireGuard core CLI"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -17,20 +17,20 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Yeni istemci anahtar çifti üret (Curve25519 base64 private key çıktısı verir)
+    /// Generate new client keypair (outputs Curve25519 base64 private key)
     Keygen {
-        /// Genel ve özel anahtarları birlikte yazdır
+        /// Print both public and private keys
         #[arg(long)]
         both: bool,
-        /// JSON formatında çıktı ver (privateKey, publicKey, presharedKey)
+        /// Output in JSON format (privateKey, publicKey, presharedKey)
         #[arg(long)]
         json: bool,
     },
-    /// Yeni pre-shared key üret (32 bayt base64).
+    /// Generate new pre-shared key (32 bytes base64)
     Genpsk,
-    /// Özel anahtardan genel anahtar türet (stdin'den okur)
+    /// Derive public key from private key (reads from stdin)
     Pubkey,
-    /// İstemci WireGuard config dosyası üret (stdin'den private key okur)
+    /// Generate client WireGuard config file (reads private key from stdin)
     #[command(name = "genconfig")]
     GenConfig {
         #[arg(long)]
@@ -50,9 +50,9 @@ enum Commands {
         #[arg(short, long, default_value = "client.conf")]
         output: String,
     },
-    /// VPN'i bağla (root gerekir): sudo untracx connect client.conf
+    /// Connect VPN (requires root/admin): sudo untracx connect client.conf
     Connect { config: String },
-    /// VPN'i bağla; özel anahtar stdin'den okunur (root gerekir)
+    /// Connect VPN; private key is read from stdin (requires root/admin)
     #[command(name = "connect-stdin")]
     ConnectStdin {
         #[arg(long)]
@@ -72,11 +72,11 @@ enum Commands {
         #[arg(short, long, default_value = "stdin.conf")]
         output: String,
     },
-    /// VPN'i kapat (root gerekir)
+    /// Disconnect VPN (requires root/admin)
     Down { config: String },
-    /// Bağlantı durumunu göster
+    /// Display connection status
     Status,
-    /// Ayrıcalıklı helper servisini başlat/kontrol et (root gerekir)
+    /// Start/manage privileged helper service (requires root/admin)
     #[command(name = "helper")]
     Helper {
         #[command(subcommand)]
@@ -86,11 +86,11 @@ enum Commands {
 
 #[derive(Subcommand)]
 enum HelperAction {
-    /// Helper servisini başlat
+    /// Start helper service
     Start,
-    /// Helper servisini durdur
+    /// Stop helper service
     Stop,
-    /// Helper servisi durumunu göster
+    /// Display helper service status
     Status,
 }
 
@@ -107,7 +107,7 @@ impl From<HelperAction> for helper::HelperAction {
 fn main() {
     let cli = Cli::parse();
     if let Err(e) = run(cli) {
-        eprintln!("HATA: {e}");
+        eprintln!("ERROR: {e}");
         std::process::exit(1);
     }
 }
@@ -147,7 +147,7 @@ fn run(cli: Cli) -> Result<(), String> {
             let trimmed = private_b64.trim();
             if trimmed.is_empty() {
                 private_b64.zeroize();
-                return Err("stdin boş; özel anahtarı pipe ile gönderin".into());
+                return Err("stdin is empty; pipe private key into command".into());
             }
             let result = keys::public_from_private(trimmed);
             private_b64.zeroize();
@@ -172,7 +172,7 @@ fn run(cli: Cli) -> Result<(), String> {
             let trimmed = private_b64.trim();
             if trimmed.is_empty() {
                 private_b64.zeroize();
-                return Err("stdin boş; özel anahtarı pipe ile gönderin".into());
+                return Err("stdin is empty; pipe private key into command".into());
             }
             {
                 let mut raw = keys::validate_private(trimmed)?;
@@ -193,8 +193,8 @@ fn run(cli: Cli) -> Result<(), String> {
             let mut rendered = result?;
             fs_util::validate_safe_path(&output)?;
             fs_util::write_secret_file_atomic(Path::new(&output), &mut rendered)?;
-            println!("✓ {output} yazıldı (0600)");
-            println!("Bağlanmak için: sudo untracx connect {output}");
+            println!("✓ {output} written (0600)");
+            println!("To connect: sudo untracx connect {output}");
         }
         Commands::Connect { config } => {
             fs_util::validate_safe_path(&config)?;
@@ -225,8 +225,8 @@ fn run(cli: Cli) -> Result<(), String> {
             private_key.zeroize();
             fs_util::validate_safe_path(&output)?;
             fs_util::write_secret_file_atomic(Path::new(&output), &mut rendered)?;
-            println!("✓ {output} yazıldı (0600, stdin'den okunan private key kullanıldı)");
-            println!("Bağlanmak için: sudo untracx connect {output}");
+            println!("✓ {output} written (0600, using private key from stdin)");
+            println!("To connect: sudo untracx connect {output}");
         }
         Commands::Down { config } => {
             fs_util::validate_safe_path(&config)?;
@@ -247,7 +247,7 @@ fn read_private_key_from_stdin() -> Result<String, String> {
     let key = buf.trim().to_string();
     buf.zeroize();
     if key.is_empty() {
-        return Err("stdin boş kaldı; private key sağlayın".into());
+        return Err("stdin is empty; provide private key".into());
     }
     Ok(key)
 }
